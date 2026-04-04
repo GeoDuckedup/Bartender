@@ -20,10 +20,11 @@ PLAYFIELD_TOP = HUD_HEIGHT
 PLAYFIELD_HEIGHT = LOGICAL_HEIGHT - HUD_HEIGHT
 BAR_COUNT = 4
 BAR_HEIGHT = 48
-BAR_DECK_HEIGHT = 6
-BAR_FRONT_HEIGHT = 22
-BAR_BOTTOM_TRIM_HEIGHT = 10
+BAR_DECK_HEIGHT = 4
+BAR_FRONT_HEIGHT = 18
+BAR_BOTTOM_TRIM_HEIGHT = 8
 BAR_VISUAL_HEIGHT = BAR_DECK_HEIGHT + BAR_FRONT_HEIGHT + BAR_BOTTOM_TRIM_HEIGHT
+BAR_VISUAL_OFFSET_Y = 10
 BAR_LEFT = 0
 RIGHT_WALL_WIDTH = 52
 RIGHT_WALL_LEFT = LOGICAL_WIDTH - RIGHT_WALL_WIDTH
@@ -61,16 +62,12 @@ BAR_TOPS = [
     PLAYFIELD_TOP + (BAR_SPACING * (index + 1)) + (BAR_HEIGHT * index)
     for index in range(BAR_COUNT)
 ]
-BAR_FRONT_TOPS = [top + BAR_DECK_HEIGHT for top in BAR_TOPS]
+BAR_FRONT_TOPS = [top + BAR_VISUAL_OFFSET_Y + BAR_DECK_HEIGHT for top in BAR_TOPS]
 LANE_CENTERS = [top + (BAR_HEIGHT // 2) for top in BAR_TOPS]
 TAP_HOME_X = BAR_RIGHT
 BARTENDER_WALK_MIN_X = BAR_LEFT
 BARTENDER_WALK_MAX_X = TAP_HOME_X
 TAP_GLASS_X = BAR_RIGHT - 14
-GLASS_SURFACE_OVERLAP = 10
-TIP_SURFACE_OVERLAP = 4
-
-
 @dataclass(frozen=True)
 class BarDecoration:
     grain_offsets: tuple[int, ...]
@@ -104,16 +101,16 @@ def _build_bar_decorations() -> tuple[BarDecoration, ...]:
 BAR_DECORATIONS = _build_bar_decorations()
 
 
-def bar_front_top_y(bar_index: int) -> int:
-    return BAR_FRONT_TOPS[bar_index]
+def bar_surface_y(bar_index: int) -> int:
+    return BAR_TOPS[bar_index] + BAR_VISUAL_OFFSET_Y
 
 
 def lane_surface_glass_y(bar_index: int, glass_height: int) -> int:
-    return bar_front_top_y(bar_index) - (glass_height - GLASS_SURFACE_OVERLAP)
+    return bar_surface_y(bar_index) - (glass_height // 2)
 
 
 def lane_surface_tip_y(bar_index: int, tip_height: int) -> int:
-    return bar_front_top_y(bar_index) - (tip_height - TIP_SURFACE_OVERLAP)
+    return bar_surface_y(bar_index) - (tip_height // 3)
 
 
 class SceneRenderer:
@@ -130,41 +127,16 @@ class SceneRenderer:
 
     def draw_scene_backdrop(self, surface: pygame.Surface) -> None:
         self.draw_background(surface)
-        self.draw_bar_backs(surface)
         self.draw_right_wall(surface)
         self.draw_taps(surface)
 
     def draw_background(self, surface: pygame.Surface) -> None:
         surface.fill(BACKGROUND_COLOR)
 
-    def draw_bar_backs(self, surface: pygame.Surface) -> None:
-        for index, top in enumerate(BAR_TOPS):
-            rect = pygame.Rect(BAR_LEFT, top, BAR_WIDTH, BAR_HEIGHT)
-            self.draw_bar_back(surface, rect, BAR_DECORATIONS[index])
-
     def draw_bar_fronts(self, surface: pygame.Surface) -> None:
         for index, top in enumerate(BAR_TOPS):
             rect = pygame.Rect(BAR_LEFT, top, BAR_WIDTH, BAR_HEIGHT)
             self.draw_bar_front(surface, rect, BAR_DECORATIONS[index])
-
-    def draw_bar_back(
-        self,
-        surface: pygame.Surface,
-        rect: pygame.Rect,
-        decoration: BarDecoration,
-    ) -> None:
-        deck_rect = pygame.Rect(rect.left, rect.top, rect.width, BAR_DECK_HEIGHT)
-        pygame.draw.rect(surface, BAR_DECK_COLOR, deck_rect)
-
-        top_rail = pygame.Rect(rect.left, rect.top, rect.width, 4)
-        pygame.draw.rect(surface, BAR_RAIL_COLOR, top_rail)
-        pygame.draw.line(
-            surface,
-            BAR_GRAIN_COLOR,
-            (deck_rect.left + 10, deck_rect.bottom - 1),
-            (deck_rect.right - 10, deck_rect.bottom - 1),
-            1,
-        )
 
     def draw_bar_front(
         self,
@@ -172,15 +144,34 @@ class SceneRenderer:
         rect: pygame.Rect,
         decoration: BarDecoration,
     ) -> None:
-        front_rect = pygame.Rect(rect.left, rect.top + BAR_DECK_HEIGHT, rect.width, BAR_FRONT_HEIGHT)
+        deck_rect = pygame.Rect(
+            rect.left,
+            rect.top + BAR_VISUAL_OFFSET_Y,
+            rect.width,
+            BAR_DECK_HEIGHT,
+        )
+        front_rect = pygame.Rect(
+            rect.left,
+            deck_rect.bottom,
+            rect.width,
+            BAR_FRONT_HEIGHT,
+        )
         bottom_trim = pygame.Rect(
             rect.left,
             front_rect.bottom,
             rect.width,
             BAR_BOTTOM_TRIM_HEIGHT,
         )
+        pygame.draw.rect(surface, BAR_DECK_COLOR, deck_rect)
         pygame.draw.rect(surface, BAR_FRONT_COLOR, front_rect)
         pygame.draw.rect(surface, BAR_RAIL_COLOR, bottom_trim)
+        pygame.draw.line(
+            surface,
+            BAR_RAIL_COLOR,
+            (deck_rect.left, deck_rect.top),
+            (deck_rect.right, deck_rect.top),
+            2,
+        )
         pygame.draw.line(
             surface,
             BAR_RAIL_COLOR,
@@ -189,7 +180,7 @@ class SceneRenderer:
             2,
         )
 
-        for offset in (5, 10, 15):
+        for offset in (4, 8, 12):
             y = min(front_rect.bottom - 4, front_rect.top + offset)
             pygame.draw.line(
                 surface,

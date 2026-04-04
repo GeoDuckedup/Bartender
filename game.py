@@ -364,7 +364,7 @@ class Game:
         self.returning_glasses = []
         self.missed_return_glass = False
         self.spawn_timer = 0.0
-        self.next_spawn_bar = 0
+        self.next_spawn_bar = self.patron_rng.randrange(BAR_COUNT)
         self.fail_feedback_timer = 0.0
         self.fail_message = None
         self.pending_game_over = False

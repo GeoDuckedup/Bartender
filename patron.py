@@ -92,6 +92,7 @@ class Patron:
     HAT_WIDTH = 20
     HAT_HEIGHT = 8
     FEET_OFFSET = 16
+    DRAW_Y_OFFSET = -10
     LEFT_EDGE_X = 0.0
     REENTRY_X = -BODY_WIDTH
     OFFSCREEN_DRINK_X = -(BODY_WIDTH + GLASS_WIDTH + 8)
@@ -226,7 +227,7 @@ class Patron:
         return self.state is not PatronState.OFFSCREEN_DRINKING
 
     def draw(self, surface: pygame.Surface) -> None:
-        body_rect = self.body_rect
+        body_rect = self.body_rect.move(0, self.DRAW_Y_OFFSET)
         hat_rect = pygame.Rect(
             body_rect.centerx - (self.HAT_WIDTH // 2),
             body_rect.top - self.HAT_HEIGHT,
@@ -240,7 +241,7 @@ class Patron:
     def draw_held_glass(self, surface: pygame.Surface) -> None:
         if self.state not in (PatronState.RECEIVING, PatronState.DRINKING):
             return
-        self._draw_held_glass(surface, self.body_rect)
+        self._draw_held_glass(surface, self.body_rect.move(0, self.DRAW_Y_OFFSET))
 
     def _draw_held_glass(
         self,
