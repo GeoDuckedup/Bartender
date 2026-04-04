@@ -33,9 +33,15 @@ class TapGlass:
     def reset(self) -> None:
         self.fill_ratio = 0.0
 
-    def draw(self, surface: pygame.Surface, bar_index: int) -> None:
+    def draw(
+        self,
+        surface: pygame.Surface,
+        bar_index: int,
+        *,
+        left: float | None = None,
+    ) -> None:
         glass_rect = pygame.Rect(
-            TAP_GLASS_X,
+            TAP_GLASS_X if left is None else round(left),
             lane_surface_glass_y(bar_index, self.HEIGHT),
             self.WIDTH,
             self.HEIGHT,

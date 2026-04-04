@@ -49,6 +49,7 @@ class Game:
     SPAWN_X = -Patron.BODY_WIDTH
     STARTING_LIVES = 3
     MAX_LIVES = 99
+    INITIAL_SPAWN_DELAY = 0.35
     FAIL_FEEDBACK_DURATION = 0.6
     FAIL_SHAKE_AMPLITUDE = 4
     BEER_SERVED_SCORE = 10
@@ -170,8 +171,9 @@ class Game:
         for returning_glass in self.returning_glasses:
             returning_glass.draw(surface)
         self.bartender.draw_flying_glasses(surface)
-        self.bartender.draw_tap_glass(surface)
         self.bartender.draw(surface)
+        self.bartender.draw_tap_glass(surface)
+        self.bartender.draw_serve_visual(surface)
         self.hud_renderer.draw(
             surface,
             lives=self.lives,
@@ -363,7 +365,7 @@ class Game:
         self.tips = []
         self.returning_glasses = []
         self.missed_return_glass = False
-        self.spawn_timer = 0.0
+        self.spawn_timer = max(0.0, self.level_config.spawn_interval - self.INITIAL_SPAWN_DELAY)
         self.next_spawn_bar = self.patron_rng.randrange(BAR_COUNT)
         self.fail_feedback_timer = 0.0
         self.fail_message = None
