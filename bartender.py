@@ -22,30 +22,65 @@ from renderer import (
 )
 
 
+# Bartender movement / timing tuning:
+# Keep gameplay-facing bartender movement here.
+BARTENDER_WALK_SPEED = 150.0
+
+# Bartender body tuning:
+# These dimensions affect the rendered body and collision footprint.
+BARTENDER_BODY_WIDTH = 20
+BARTENDER_BODY_HEIGHT = 40
+BARTENDER_HEAD_WIDTH = 18
+BARTENDER_HEAD_HEIGHT = 14
+BARTENDER_APRON_WIDTH = 10
+BARTENDER_APRON_HEIGHT = 28
+BARTENDER_FEET_OFFSET = 16
+BARTENDER_APRON_Y_OFFSET = 2
+BARTENDER_CATCH_RECT_PADDING = (10, 6)
+
+# Bartender serve animation tuning:
+# This entire block is visual-only. It should never change the actual
+# timing of when the beer is launched, only how the serve reads on screen.
+SERVE_VISUAL_DURATION = 0.2
+SERVE_LEFT_HAND_LINGER_DURATION = 0.6
+SERVE_HOLD_RIGHT_FRACTION = 0.22
+SERVE_MOTION_FRACTION = 0.62
+SERVE_ARM_THICKNESS = 8
+SERVE_HAND_SIZE = 10
+SERVE_RIGHT_GLASS_OFFSET_X = BARTENDER_BODY_WIDTH - 2
+SERVE_LEFT_GLASS_OFFSET_X = -3
+SERVE_ARM_START_OFFSET_X = BARTENDER_BODY_WIDTH - 4
+SERVE_ARM_Y_OFFSET = 18
+SERVE_ARM_REACH_MULTIPLIER = 1.1
+SERVE_OUTLINE_THICKNESS = 2
+SERVE_GLASS_PADDING = 2
+SERVE_GLASS_FOAM_HEIGHT = 4
+
+
 class PourState(Enum):
     IDLE = auto()
     POURING = auto()
 
 
 class Bartender:
-    WALK_SPEED = 150.0
-    SERVE_VISUAL_DURATION = 0.2
-    SERVE_LEFT_HAND_LINGER_DURATION = 0.6
-    SERVE_HOLD_RIGHT_FRACTION = 0.22
-    SERVE_MOTION_FRACTION = 0.62
-    BODY_WIDTH = 20
-    BODY_HEIGHT = 40
-    HEAD_WIDTH = 18
-    HEAD_HEIGHT = 14
-    APRON_WIDTH = 10
-    APRON_HEIGHT = 28
-    FEET_OFFSET = 16
-    ARM_THICKNESS = 8
-    HAND_SIZE = 10
-    RIGHT_GLASS_OFFSET_X = BODY_WIDTH - 2
-    LEFT_GLASS_OFFSET_X = -3
-    ARM_START_OFFSET_X = BODY_WIDTH - 4
-    ARM_Y_OFFSET = 18
+    WALK_SPEED = BARTENDER_WALK_SPEED
+    SERVE_VISUAL_DURATION = SERVE_VISUAL_DURATION
+    SERVE_LEFT_HAND_LINGER_DURATION = SERVE_LEFT_HAND_LINGER_DURATION
+    SERVE_HOLD_RIGHT_FRACTION = SERVE_HOLD_RIGHT_FRACTION
+    SERVE_MOTION_FRACTION = SERVE_MOTION_FRACTION
+    BODY_WIDTH = BARTENDER_BODY_WIDTH
+    BODY_HEIGHT = BARTENDER_BODY_HEIGHT
+    HEAD_WIDTH = BARTENDER_HEAD_WIDTH
+    HEAD_HEIGHT = BARTENDER_HEAD_HEIGHT
+    APRON_WIDTH = BARTENDER_APRON_WIDTH
+    APRON_HEIGHT = BARTENDER_APRON_HEIGHT
+    FEET_OFFSET = BARTENDER_FEET_OFFSET
+    ARM_THICKNESS = SERVE_ARM_THICKNESS
+    HAND_SIZE = SERVE_HAND_SIZE
+    RIGHT_GLASS_OFFSET_X = SERVE_RIGHT_GLASS_OFFSET_X
+    LEFT_GLASS_OFFSET_X = SERVE_LEFT_GLASS_OFFSET_X
+    ARM_START_OFFSET_X = SERVE_ARM_START_OFFSET_X
+    ARM_Y_OFFSET = SERVE_ARM_Y_OFFSET
 
     def __init__(self) -> None:
         self.bar_index = 0
@@ -93,7 +128,7 @@ class Bartender:
     @property
     def catch_rect(self) -> pygame.Rect:
         body_rect = self.body_rect
-        return body_rect.inflate(10, 6)
+        return body_rect.inflate(*BARTENDER_CATCH_RECT_PADDING)
 
     def move_up(self) -> None:
         self.bar_index = (self.bar_index - 1) % BAR_COUNT
@@ -219,26 +254,29 @@ class Bartender:
             if elapsed_fraction < self.SERVE_MOTION_FRACTION:
                 glass_top = lane_surface_glass_y(self.serve_visual_bar_index, TapGlass.HEIGHT)
                 glass_rect = pygame.Rect(glass_left, glass_top, TapGlass.WIDTH, TapGlass.HEIGHT)
-                pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, 2)
+                pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, SERVE_OUTLINE_THICKNESS)
                 fill_rect = pygame.Rect(
-                    glass_rect.left + 2,
-                    glass_rect.top + 2,
-                    TapGlass.WIDTH - 4,
-                    TapGlass.HEIGHT - 4,
+                    glass_rect.left + SERVE_GLASS_PADDING,
+                    glass_rect.top + SERVE_GLASS_PADDING,
+                    TapGlass.WIDTH - (SERVE_GLASS_PADDING * 2),
+                    TapGlass.HEIGHT - (SERVE_GLASS_PADDING * 2),
                 )
                 pygame.draw.rect(surface, GLASS_FILL_COLOR, fill_rect)
                 foam_rect = pygame.Rect(
                     glass_rect.left + 1,
                     glass_rect.top + 1,
-                    TapGlass.WIDTH - 2,
-                    4,
+                    TapGlass.WIDTH - SERVE_OUTLINE_THICKNESS,
+                    SERVE_GLASS_FOAM_HEIGHT,
                 )
                 pygame.draw.rect(surface, GLASS_FOAM_COLOR, foam_rect)
             self._draw_arm(
                 surface,
                 shoulder_x=round(
                     self.serve_visual_shoulder_x
-                    + ((glass_left - self.serve_visual_shoulder_x) * min(1.0, motion_progress * 1.1))
+                    + (
+                        (glass_left - self.serve_visual_shoulder_x)
+                        * min(1.0, motion_progress * SERVE_ARM_REACH_MULTIPLIER)
+                    )
                 ),
                 hand_x=glass_left + 5,
                 arm_y=self.serve_visual_arm_y,
@@ -267,7 +305,7 @@ class Bartender:
         )
         apron_rect = pygame.Rect(
             body_rect.centerx - (self.APRON_WIDTH // 2),
-            body_rect.centery - (self.APRON_HEIGHT // 2) + 2,
+            body_rect.centery - (self.APRON_HEIGHT // 2) + BARTENDER_APRON_Y_OFFSET,
             self.APRON_WIDTH,
             self.APRON_HEIGHT,
         )

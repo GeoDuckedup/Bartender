@@ -17,6 +17,52 @@ from renderer import (
 )
 
 
+# Patron behavior tuning:
+# These control how patrons move, drink, and get shoved back after a serve.
+PATRON_DRINK_DURATION = 1.1
+PATRON_RECEIVE_SPEED = 220.0
+PATRON_DEFAULT_WALK_SPEED = 42.0
+PATRON_MIN_WALK_SPEED = 34.0
+PATRON_MAX_WALK_SPEED = 52.0
+PATRON_DRINK_VARIATION_MIN = 0.85
+PATRON_DRINK_VARIATION_MAX = 1.15
+PATRON_SHORT_PUSHBACK_DISTANCE = 40.0
+PATRON_SHORT_MIN_VISIBLE_X = 88.0
+PATRON_SHORT_FALLBACK_PUSHBACK = 18.0
+
+# Patron body / draw tuning:
+# DRAW_Y_OFFSET is visual-only; it helps hide more of the body behind the bar.
+PATRON_BODY_WIDTH = 18
+PATRON_BODY_HEIGHT = 36
+PATRON_HAT_WIDTH = 20
+PATRON_HAT_HEIGHT = 8
+PATRON_FEET_OFFSET = 16
+PATRON_BAR_OCCLUSION_DRAW_OFFSET = -10
+PATRON_QUEUE_GAP = 18
+
+# Patron mug / staging tuning:
+# These values control how the patron-held beer sits relative to the body.
+PATRON_GLASS_WIDTH = 14
+PATRON_GLASS_HEIGHT = 20
+PATRON_OFFSCREEN_DRINK_MARGIN = 8
+PATRON_RETURN_GLASS_X_OFFSET = PATRON_BODY_WIDTH
+PATRON_HELD_GLASS_OUTLINE = 2
+PATRON_HELD_GLASS_PADDING = 2
+PATRON_HELD_GLASS_FULL_FOAM_THRESHOLD = 0.99
+PATRON_HELD_GLASS_FOAM_HEIGHT = 4
+
+# Patron lane bounds:
+# Reentry and offscreen drink positions live here so shove tuning stays readable.
+PATRON_LEFT_EDGE_X = 0.0
+PATRON_REENTRY_X = -PATRON_BODY_WIDTH
+
+# Patron RNG tuning:
+# Separate seeds make walk-speed tuning reproducible while still allowing
+# behavior choices to vary independently.
+WALK_SPEED_RNG_SEED = 1983
+PATRON_BEHAVIOR_RNG_SEED = 1985
+
+
 class PatronState(Enum):
     WALKING = auto()
     RECEIVING = auto()
@@ -79,28 +125,28 @@ PATRON_ARCHETYPES = (
 
 
 class Patron:
-    DRINK_DURATION = 1.1
-    RECEIVE_SPEED = 220.0
-    DEFAULT_WALK_SPEED = 42.0
-    MIN_WALK_SPEED = 34.0
-    MAX_WALK_SPEED = 52.0
-    BODY_WIDTH = 18
-    BODY_HEIGHT = 36
-    QUEUE_GAP = 18
-    GLASS_WIDTH = 14
-    GLASS_HEIGHT = 20
-    HAT_WIDTH = 20
-    HAT_HEIGHT = 8
-    FEET_OFFSET = 16
-    DRAW_Y_OFFSET = -10
-    LEFT_EDGE_X = 0.0
-    REENTRY_X = -BODY_WIDTH
-    OFFSCREEN_DRINK_X = -(BODY_WIDTH + GLASS_WIDTH + 8)
-    RETURN_GLASS_SPAWN_X = REENTRY_X + BODY_WIDTH
-    DRINK_DELAY_VARIATION_MIN = 0.85
-    DRINK_DELAY_VARIATION_MAX = 1.15
-    SHORT_PUSHBACK_DISTANCE = 40.0
-    SHORT_MIN_VISIBLE_X = 88.0
+    DRINK_DURATION = PATRON_DRINK_DURATION
+    RECEIVE_SPEED = PATRON_RECEIVE_SPEED
+    DEFAULT_WALK_SPEED = PATRON_DEFAULT_WALK_SPEED
+    MIN_WALK_SPEED = PATRON_MIN_WALK_SPEED
+    MAX_WALK_SPEED = PATRON_MAX_WALK_SPEED
+    BODY_WIDTH = PATRON_BODY_WIDTH
+    BODY_HEIGHT = PATRON_BODY_HEIGHT
+    QUEUE_GAP = PATRON_QUEUE_GAP
+    GLASS_WIDTH = PATRON_GLASS_WIDTH
+    GLASS_HEIGHT = PATRON_GLASS_HEIGHT
+    HAT_WIDTH = PATRON_HAT_WIDTH
+    HAT_HEIGHT = PATRON_HAT_HEIGHT
+    FEET_OFFSET = PATRON_FEET_OFFSET
+    DRAW_Y_OFFSET = PATRON_BAR_OCCLUSION_DRAW_OFFSET
+    LEFT_EDGE_X = PATRON_LEFT_EDGE_X
+    REENTRY_X = PATRON_REENTRY_X
+    OFFSCREEN_DRINK_X = -(BODY_WIDTH + GLASS_WIDTH + PATRON_OFFSCREEN_DRINK_MARGIN)
+    RETURN_GLASS_SPAWN_X = REENTRY_X + PATRON_RETURN_GLASS_X_OFFSET
+    DRINK_DELAY_VARIATION_MIN = PATRON_DRINK_VARIATION_MIN
+    DRINK_DELAY_VARIATION_MAX = PATRON_DRINK_VARIATION_MAX
+    SHORT_PUSHBACK_DISTANCE = PATRON_SHORT_PUSHBACK_DISTANCE
+    SHORT_MIN_VISIBLE_X = PATRON_SHORT_MIN_VISIBLE_X
 
     def __init__(
         self,
@@ -255,26 +301,26 @@ class Patron:
             self.GLASS_HEIGHT,
         )
         pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, 2)
-
+        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, PATRON_HELD_GLASS_OUTLINE)
         fill_ratio = max(0.0, min(1.0, self.held_glass_fill_ratio))
         if fill_ratio > 0.0:
-            inner_width = self.GLASS_WIDTH - 4
-            inner_height = self.GLASS_HEIGHT - 4
+            inner_width = self.GLASS_WIDTH - (PATRON_HELD_GLASS_PADDING * 2)
+            inner_height = self.GLASS_HEIGHT - (PATRON_HELD_GLASS_PADDING * 2)
             fill_height = max(1, round(inner_height * fill_ratio))
             fill_rect = pygame.Rect(
-                glass_rect.left + 2,
-                glass_rect.bottom - 2 - fill_height,
+                glass_rect.left + PATRON_HELD_GLASS_PADDING,
+                glass_rect.bottom - PATRON_HELD_GLASS_PADDING - fill_height,
                 inner_width,
                 fill_height,
             )
             pygame.draw.rect(surface, GLASS_FILL_COLOR, fill_rect)
 
-        if fill_ratio >= 0.99:
+        if fill_ratio >= PATRON_HELD_GLASS_FULL_FOAM_THRESHOLD:
             foam_rect = pygame.Rect(
                 glass_rect.left + 1,
                 glass_rect.top + 1,
-                self.GLASS_WIDTH - 2,
-                4,
+                self.GLASS_WIDTH - PATRON_HELD_GLASS_OUTLINE,
+                PATRON_HELD_GLASS_FOAM_HEIGHT,
             )
             pygame.draw.rect(surface, GLASS_FOAM_COLOR, foam_rect)
 
@@ -289,12 +335,12 @@ class Patron:
 
         short_target_x = max(self.SHORT_MIN_VISIBLE_X, self.x - self.SHORT_PUSHBACK_DISTANCE)
         if short_target_x >= self.x:
-            short_target_x = max(self.LEFT_EDGE_X, self.x - 18.0)
+            short_target_x = max(self.LEFT_EDGE_X, self.x - PATRON_SHORT_FALLBACK_PUSHBACK)
         return min(self.x, short_target_x), False
 
 
 def build_walk_speed_rng() -> Random:
-    return Random(1983)
+    return Random(WALK_SPEED_RNG_SEED)
 
 
-_patron_behavior_rng = Random(1985)
+_patron_behavior_rng = Random(PATRON_BEHAVIOR_RNG_SEED)

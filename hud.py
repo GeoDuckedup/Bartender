@@ -11,10 +11,21 @@ from renderer import (
 )
 
 
+# HUD layout / typography tuning:
+# Keep all HUD spacing and type sizes here so UI tweaks stay out of draw logic.
+HUD_MAIN_FONT_SIZE = 16
+HUD_CENTER_FONT_SIZE = 12
+HUD_SIDE_PADDING = 12
+HUD_LEVEL_Y = 12
+HUD_SERVED_Y = 29
+HUD_BORDER_Y = HUD_HEIGHT - 1
+HUD_BORDER_THICKNESS = 2
+
+
 class HUDRenderer:
     def __init__(self) -> None:
-        self.main_font = pygame.font.SysFont("couriernew", 16, bold=True)
-        self.center_font = pygame.font.SysFont("couriernew", 12, bold=True)
+        self.main_font = pygame.font.SysFont("couriernew", HUD_MAIN_FONT_SIZE, bold=True)
+        self.center_font = pygame.font.SysFont("couriernew", HUD_CENTER_FONT_SIZE, bold=True)
 
     def draw(
         self,
@@ -31,16 +42,16 @@ class HUDRenderer:
         pygame.draw.line(
             surface,
             HUD_BORDER_COLOR,
-            (0, HUD_HEIGHT - 1),
-            (LOGICAL_WIDTH, HUD_HEIGHT - 1),
-            2,
+            (0, HUD_BORDER_Y),
+            (LOGICAL_WIDTH, HUD_BORDER_Y),
+            HUD_BORDER_THICKNESS,
         )
 
         self._blit_text(
             surface,
             f"LIVES {lives:02d}",
             self.main_font,
-            x=12,
+            x=HUD_SIDE_PADDING,
             y=HUD_HEIGHT // 2,
             anchor="midleft",
         )
@@ -49,7 +60,7 @@ class HUDRenderer:
             f"LEVEL {current_level:02d}",
             self.center_font,
             x=LOGICAL_WIDTH // 2,
-            y=12,
+            y=HUD_LEVEL_Y,
             anchor="center",
         )
         self._blit_text(
@@ -57,14 +68,14 @@ class HUDRenderer:
             f"SERVED {served:02d}/{target:02d}",
             self.center_font,
             x=LOGICAL_WIDTH // 2,
-            y=29,
+            y=HUD_SERVED_Y,
             anchor="center",
         )
         self._blit_text(
             surface,
             f"SCORE {score:06d}",
             self.main_font,
-            x=LOGICAL_WIDTH - 12,
+            x=LOGICAL_WIDTH - HUD_SIDE_PADDING,
             y=HUD_HEIGHT // 2,
             anchor="midright",
         )

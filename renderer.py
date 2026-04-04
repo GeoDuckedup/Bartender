@@ -8,6 +8,8 @@ import pygame
 
 USE_SPRITES = False
 
+# Window / timing:
+# Core render target sizes and frame rate.
 LOGICAL_WIDTH = 400
 LOGICAL_HEIGHT = 300
 WINDOW_SCALE = 2
@@ -15,6 +17,8 @@ WINDOW_WIDTH = LOGICAL_WIDTH * WINDOW_SCALE
 WINDOW_HEIGHT = LOGICAL_HEIGHT * WINDOW_SCALE
 FPS = 60
 
+# Scene layout:
+# These define the playable stage geometry and the visible bar object.
 HUD_HEIGHT = 44
 PLAYFIELD_TOP = HUD_HEIGHT
 PLAYFIELD_HEIGHT = LOGICAL_HEIGHT - HUD_HEIGHT
@@ -24,7 +28,7 @@ BAR_DECK_HEIGHT = 4
 BAR_FRONT_HEIGHT = 18
 BAR_BOTTOM_TRIM_HEIGHT = 8
 BAR_VISUAL_HEIGHT = BAR_DECK_HEIGHT + BAR_FRONT_HEIGHT + BAR_BOTTOM_TRIM_HEIGHT
-BAR_VISUAL_OFFSET_Y = 10
+BAR_DRAW_OFFSET_Y = 10
 BAR_LEFT = 0
 RIGHT_WALL_WIDTH = 52
 RIGHT_WALL_LEFT = LOGICAL_WIDTH - RIGHT_WALL_WIDTH
@@ -33,7 +37,20 @@ BAR_RIGHT = RIGHT_WALL_LEFT - SERVICE_STRIP_WIDTH
 BAR_WIDTH = BAR_RIGHT - BAR_LEFT
 GRAIN_LINE_COUNT = 5
 BAR_SPACING = (PLAYFIELD_HEIGHT - (BAR_COUNT * BAR_HEIGHT)) // (BAR_COUNT + 1)
+BAR_GRAIN_INSET_X = 10
+BAR_KNOT_MIN_X = 24
+BAR_KNOT_RIGHT_PADDING = 40
+BAR_KNOT_MIN_WIDTH = 10
+BAR_KNOT_MAX_WIDTH = 18
+BAR_KNOT_MIN_HEIGHT = 4
+BAR_KNOT_MAX_HEIGHT = 8
+BAR_KNOT_MARGIN_Y = 10
+BAR_FRONT_GRAIN_OFFSETS = (4, 8, 12)
+BAR_FRONT_KNOT_TOP_PADDING = 4
+BAR_FRONT_KNOT_BOTTOM_PADDING = 8
 
+# Palette:
+# Keep scene colors centralized so stage look can be tuned quickly.
 BACKGROUND_COLOR = pygame.Color("#2C1A0E")
 HUD_BACKGROUND_COLOR = pygame.Color("#1A1008")
 HUD_BORDER_COLOR = pygame.Color("#6B3A1F")
@@ -58,16 +75,33 @@ GLASS_FOAM_COLOR = pygame.Color("#F5F0E8")
 TIP_COLOR = pygame.Color("#F0C419")
 TIP_SHADOW_COLOR = pygame.Color("#9C6A09")
 
+# Lane anchors:
+# These are the reusable positional anchors other files should rely on
+# instead of hardcoding bar-relative math.
 BAR_TOPS = [
     PLAYFIELD_TOP + (BAR_SPACING * (index + 1)) + (BAR_HEIGHT * index)
     for index in range(BAR_COUNT)
 ]
-BAR_FRONT_TOPS = [top + BAR_VISUAL_OFFSET_Y + BAR_DECK_HEIGHT for top in BAR_TOPS]
+BAR_FRONT_TOPS = [top + BAR_DRAW_OFFSET_Y + BAR_DECK_HEIGHT for top in BAR_TOPS]
 LANE_CENTERS = [top + (BAR_HEIGHT // 2) for top in BAR_TOPS]
 TAP_HOME_X = BAR_RIGHT
 BARTENDER_WALK_MIN_X = BAR_LEFT
 BARTENDER_WALK_MAX_X = TAP_HOME_X
 TAP_GLASS_X = BAR_RIGHT - 14
+
+# Tap geometry:
+# Tap parts stay adjustable here for future stage art swaps.
+TAP_STEM_WIDTH = 8
+TAP_STEM_HEIGHT = 32
+TAP_STEM_RIGHT_MARGIN = 16
+TAP_SPOUT_HEIGHT = 8
+TAP_SPOUT_Y_OFFSET = 4
+TAP_HANDLE_WIDTH = 12
+TAP_HANDLE_HEIGHT = 6
+TAP_HANDLE_LEFT_OFFSET = 8
+TAP_HANDLE_Y_OFFSET = -12
+
+
 @dataclass(frozen=True)
 class BarDecoration:
     grain_offsets: tuple[int, ...]
@@ -79,15 +113,16 @@ def _build_bar_decorations() -> tuple[BarDecoration, ...]:
     decorations: list[BarDecoration] = []
     for _ in range(BAR_COUNT):
         grain_offsets = tuple(
-            rng.randint(10, BAR_HEIGHT - 10) for _ in range(GRAIN_LINE_COUNT)
+            rng.randint(BAR_KNOT_MARGIN_Y, BAR_HEIGHT - BAR_KNOT_MARGIN_Y)
+            for _ in range(GRAIN_LINE_COUNT)
         )
         knot_count = rng.randint(2, 3)
         knot_rects = []
         for _ in range(knot_count):
-            knot_width = rng.randint(10, 18)
-            knot_height = rng.randint(4, 8)
-            x = rng.randint(24, BAR_WIDTH - 40)
-            y = rng.randint(10, BAR_HEIGHT - knot_height - 10)
+            knot_width = rng.randint(BAR_KNOT_MIN_WIDTH, BAR_KNOT_MAX_WIDTH)
+            knot_height = rng.randint(BAR_KNOT_MIN_HEIGHT, BAR_KNOT_MAX_HEIGHT)
+            x = rng.randint(BAR_KNOT_MIN_X, BAR_WIDTH - BAR_KNOT_RIGHT_PADDING)
+            y = rng.randint(BAR_KNOT_MARGIN_Y, BAR_HEIGHT - knot_height - BAR_KNOT_MARGIN_Y)
             knot_rects.append(pygame.Rect(x, y, knot_width, knot_height))
         decorations.append(
             BarDecoration(
@@ -102,7 +137,7 @@ BAR_DECORATIONS = _build_bar_decorations()
 
 
 def bar_surface_y(bar_index: int) -> int:
-    return BAR_TOPS[bar_index] + BAR_VISUAL_OFFSET_Y
+    return BAR_TOPS[bar_index] + BAR_DRAW_OFFSET_Y
 
 
 def lane_surface_glass_y(bar_index: int, glass_height: int) -> int:
@@ -146,7 +181,7 @@ class SceneRenderer:
     ) -> None:
         deck_rect = pygame.Rect(
             rect.left,
-            rect.top + BAR_VISUAL_OFFSET_Y,
+            rect.top + BAR_DRAW_OFFSET_Y,
             rect.width,
             BAR_DECK_HEIGHT,
         )
@@ -180,18 +215,20 @@ class SceneRenderer:
             2,
         )
 
-        for offset in (4, 8, 12):
-            y = min(front_rect.bottom - 4, front_rect.top + offset)
+        for offset in BAR_FRONT_GRAIN_OFFSETS:
+            y = min(front_rect.bottom - BAR_KNOT_MIN_HEIGHT, front_rect.top + offset)
             pygame.draw.line(
                 surface,
                 BAR_GRAIN_COLOR,
-                (front_rect.left + 10, y),
-                (front_rect.right - 10, y),
+                (front_rect.left + BAR_GRAIN_INSET_X, y),
+                (front_rect.right - BAR_GRAIN_INSET_X, y),
                 1,
             )
 
         for knot_rect in decoration.knot_rects:
-            knot_y = front_rect.top + 4 + (knot_rect.y % max(1, front_rect.height - knot_rect.height - 8))
+            knot_y = front_rect.top + BAR_FRONT_KNOT_TOP_PADDING + (
+                knot_rect.y % max(1, front_rect.height - knot_rect.height - BAR_FRONT_KNOT_BOTTOM_PADDING)
+            )
             shifted_rect = pygame.Rect(
                 knot_rect.left + rect.left,
                 knot_y,
@@ -214,10 +251,25 @@ class SceneRenderer:
             self.draw_tap(surface, center_y)
 
     def draw_tap(self, surface: pygame.Surface, center_y: int) -> None:
-        stem_left = RIGHT_WALL_LEFT + RIGHT_WALL_WIDTH - 16
-        stem = pygame.Rect(stem_left, center_y - 16, 8, 32)
-        spout = pygame.Rect(RIGHT_WALL_LEFT, center_y + 4, stem_left + 8 - RIGHT_WALL_LEFT, 8)
-        handle = pygame.Rect(stem_left - 8, center_y - 12, 12, 6)
+        stem_left = RIGHT_WALL_LEFT + RIGHT_WALL_WIDTH - TAP_STEM_RIGHT_MARGIN
+        stem = pygame.Rect(
+            stem_left,
+            center_y - (TAP_STEM_HEIGHT // 2),
+            TAP_STEM_WIDTH,
+            TAP_STEM_HEIGHT,
+        )
+        spout = pygame.Rect(
+            RIGHT_WALL_LEFT,
+            center_y + TAP_SPOUT_Y_OFFSET,
+            stem_left + TAP_STEM_WIDTH - RIGHT_WALL_LEFT,
+            TAP_SPOUT_HEIGHT,
+        )
+        handle = pygame.Rect(
+            stem_left - TAP_HANDLE_LEFT_OFFSET,
+            center_y + TAP_HANDLE_Y_OFFSET,
+            TAP_HANDLE_WIDTH,
+            TAP_HANDLE_HEIGHT,
+        )
         pygame.draw.rect(surface, TAP_COLOR, stem)
         pygame.draw.rect(surface, TAP_COLOR, spout)
         pygame.draw.rect(surface, TAP_HANDLE_COLOR, handle)

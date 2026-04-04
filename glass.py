@@ -15,10 +15,31 @@ from renderer import (
 )
 
 
+# Tap / mug tuning:
+# Shared mug dimensions and outline/fill proportions live here.
+GLASS_WIDTH = 14
+GLASS_HEIGHT = 20
+GLASS_OUTLINE_THICKNESS = 2
+GLASS_INNER_PADDING = 2
+GLASS_FOAM_HEIGHT = 4
+FULL_FOAM_THRESHOLD = 0.99
+
+# Pour / travel tuning:
+# These are gameplay-facing speeds for fill, outgoing mugs, and returning empties.
+TAP_FILL_DURATION = 0.3
+FLYING_GLASS_SPEED = 210.0
+RETURNING_GLASS_SPEED = 67.2
+
+# Collision-only vertical alignment:
+# Drawing uses renderer surface anchors, but collisions still use this
+# logical offset so gameplay can stay stable while visuals evolve.
+COLLISION_GLASS_BASELINE_OFFSET = 10
+
+
 class TapGlass:
-    FILL_RATE = 1.0 / 0.3
-    WIDTH = 14
-    HEIGHT = 20
+    FILL_RATE = 1.0 / TAP_FILL_DURATION
+    WIDTH = GLASS_WIDTH
+    HEIGHT = GLASS_HEIGHT
 
     def __init__(self) -> None:
         self.fill_ratio = 0.0
@@ -46,15 +67,15 @@ class TapGlass:
             self.WIDTH,
             self.HEIGHT,
         )
-        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, 2)
+        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, GLASS_OUTLINE_THICKNESS)
 
         if self.fill_ratio > 0.0:
-            inner_width = self.WIDTH - 4
-            inner_height = self.HEIGHT - 4
+            inner_width = self.WIDTH - (GLASS_INNER_PADDING * 2)
+            inner_height = self.HEIGHT - (GLASS_INNER_PADDING * 2)
             fill_height = max(1, round(inner_height * self.fill_ratio))
             fill_rect = pygame.Rect(
-                glass_rect.left + 2,
-                glass_rect.bottom - 2 - fill_height,
+                glass_rect.left + GLASS_INNER_PADDING,
+                glass_rect.bottom - GLASS_INNER_PADDING - fill_height,
                 inner_width,
                 fill_height,
             )
@@ -64,8 +85,8 @@ class TapGlass:
             foam_rect = pygame.Rect(
                 glass_rect.left + 1,
                 glass_rect.top + 1,
-                self.WIDTH - 2,
-                4,
+                self.WIDTH - GLASS_OUTLINE_THICKNESS,
+                GLASS_FOAM_HEIGHT,
             )
             pygame.draw.rect(surface, GLASS_FOAM_COLOR, foam_rect)
 
@@ -75,10 +96,10 @@ class FlyingGlass:
     x: float
     bar_index: int
     fill_ratio: float = 1.0
-    speed: float = 210.0
+    speed: float = FLYING_GLASS_SPEED
 
-    WIDTH = 14
-    HEIGHT = 20
+    WIDTH = GLASS_WIDTH
+    HEIGHT = GLASS_HEIGHT
 
     def update(self, dt: float) -> None:
         self.x -= self.speed * dt
@@ -88,7 +109,7 @@ class FlyingGlass:
         lane_center_y = LANE_CENTERS[self.bar_index]
         return pygame.Rect(
             round(self.x),
-            lane_center_y - self.HEIGHT + 10,
+            lane_center_y - self.HEIGHT + COLLISION_GLASS_BASELINE_OFFSET,
             self.WIDTH,
             self.HEIGHT,
         )
@@ -104,27 +125,27 @@ class FlyingGlass:
             self.WIDTH,
             self.HEIGHT,
         )
-        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, 2)
+        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, GLASS_OUTLINE_THICKNESS)
 
         clamped_fill_ratio = max(0.0, min(1.0, self.fill_ratio))
         if clamped_fill_ratio > 0.0:
-            inner_width = self.WIDTH - 4
-            inner_height = self.HEIGHT - 4
+            inner_width = self.WIDTH - (GLASS_INNER_PADDING * 2)
+            inner_height = self.HEIGHT - (GLASS_INNER_PADDING * 2)
             fill_height = max(1, round(inner_height * clamped_fill_ratio))
             fill_rect = pygame.Rect(
-                glass_rect.left + 2,
-                glass_rect.bottom - 2 - fill_height,
+                glass_rect.left + GLASS_INNER_PADDING,
+                glass_rect.bottom - GLASS_INNER_PADDING - fill_height,
                 inner_width,
                 fill_height,
             )
             pygame.draw.rect(surface, GLASS_FILL_COLOR, fill_rect)
 
-        if clamped_fill_ratio >= 0.99:
+        if clamped_fill_ratio >= FULL_FOAM_THRESHOLD:
             foam_rect = pygame.Rect(
                 glass_rect.left + 1,
                 glass_rect.top + 1,
-                self.WIDTH - 2,
-                4,
+                self.WIDTH - GLASS_OUTLINE_THICKNESS,
+                GLASS_FOAM_HEIGHT,
             )
             pygame.draw.rect(surface, GLASS_FOAM_COLOR, foam_rect)
 
@@ -133,10 +154,10 @@ class FlyingGlass:
 class ReturningGlass:
     x: float
     bar_index: int
-    speed: float = 67.2
+    speed: float = RETURNING_GLASS_SPEED
 
-    WIDTH = 14
-    HEIGHT = 20
+    WIDTH = GLASS_WIDTH
+    HEIGHT = GLASS_HEIGHT
 
     def update(self, dt: float) -> None:
         self.x += self.speed * dt
@@ -146,7 +167,7 @@ class ReturningGlass:
         lane_center_y = LANE_CENTERS[self.bar_index]
         return pygame.Rect(
             round(self.x),
-            lane_center_y - self.HEIGHT + 10,
+            lane_center_y - self.HEIGHT + COLLISION_GLASS_BASELINE_OFFSET,
             self.WIDTH,
             self.HEIGHT,
         )
@@ -162,4 +183,4 @@ class ReturningGlass:
             self.WIDTH,
             self.HEIGHT,
         )
-        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, draw_rect, 2)
+        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, draw_rect, GLASS_OUTLINE_THICKNESS)

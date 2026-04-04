@@ -13,6 +13,73 @@ from renderer import BAR_COUNT, SceneRenderer
 from tip import Tip
 
 
+# Level pacing tuning:
+# Early levels stay forgiving, then difficulty ramps through target count,
+# spawn cadence, and patron speed.
+LEVEL_ONE_TARGET_SERVES = 10
+LEVEL_TARGET_SERVES_STEP = 5
+LEVEL_ONE_SPAWN_INTERVAL = 3.0
+LEVEL_SPAWN_INTERVAL_STEP = 0.18
+MIN_SPAWN_INTERVAL = 0.75
+LEVEL_ONE_MIN_WALK_SPEED = 16.0
+LEVEL_MIN_WALK_SPEED_STEP = 2.0
+LEVEL_ONE_MAX_WALK_SPEED = 24.0
+LEVEL_MAX_WALK_SPEED_STEP = 3.0
+LEVEL_ONE_SHOVE_WEIGHTS = (0.60, 0.25, 0.15)
+LEVEL_TWO_SHOVE_WEIGHTS = (0.55, 0.30, 0.15)
+LEVEL_THREE_PLUS_SHOVE_WEIGHTS = (0.50, 0.35, 0.15)
+
+# Run / scoring tuning:
+# These values define the overall run economy and level-clear bonus flow.
+MAX_PATRONS_PER_LANE = 3
+STARTING_LIVES = 3
+MAX_LIVES = 99
+BEER_SERVED_SCORE = 10
+TIP_SCORE = 25
+LIVES_REMAINING_BONUS = 100
+
+# Spawn / patron variety tuning:
+# The first spawn delay makes rounds feel responsive without affecting
+# the ongoing steady-state spawn interval for the level.
+FIRST_PATRON_DELAY = 0.35
+MIN_DRINK_DURATION = 0.95
+MAX_DRINK_DURATION = 1.45
+TIP_RNG_SEED = 1984
+
+# Fail feedback tuning:
+# These only affect the readability of a lost round, not the rules.
+FAIL_FEEDBACK_DURATION = 0.6
+FAIL_SHAKE_AMPLITUDE = 4
+FAIL_SHAKE_PATTERN = (
+    (0, 0),
+    (FAIL_SHAKE_AMPLITUDE, -2),
+    (-FAIL_SHAKE_AMPLITUDE, 2),
+    (2, -1),
+    (-2, 1),
+)
+FAIL_SHAKE_FPS = 30
+
+# Overlay layout tuning:
+# Centralized Y positions keep the HUD/overlay text easy to tweak
+# without hunting through draw methods.
+OVERLAY_TEXT_COLOR = pygame.Color("#F5F0E8")
+GAME_OVER_TITLE_Y = 138
+GAME_OVER_PROMPT_Y = 160
+LEVEL_CLEAR_TITLE_Y = 118
+LEVEL_CLEAR_BEER_Y = 146
+LEVEL_CLEAR_TIPS_Y = 162
+LEVEL_CLEAR_LIVES_Y = 178
+LEVEL_CLEAR_TOTAL_Y = 198
+LEVEL_CLEAR_PROMPT_Y = 224
+FAIL_OVERLAY_ALPHA = 80
+GAME_OVER_OVERLAY_ALPHA = 170
+LEVEL_CLEAR_OVERLAY_ALPHA = 160
+FAIL_OVERLAY_COLOR = (32, 0, 0, FAIL_OVERLAY_ALPHA)
+GAME_OVER_OVERLAY_COLOR = (0, 0, 0, GAME_OVER_OVERLAY_ALPHA)
+LEVEL_CLEAR_OVERLAY_COLOR = (0, 0, 0, LEVEL_CLEAR_OVERLAY_ALPHA)
+FAIL_MESSAGE_Y = 156
+
+
 @dataclass(frozen=True)
 class LevelConfig:
     target_serves: int
@@ -27,17 +94,17 @@ class LevelConfig:
 def build_level_config(level_number: int) -> LevelConfig:
     level = max(1, level_number)
     if level == 1:
-        shove_weights = (0.60, 0.25, 0.15)
+        shove_weights = LEVEL_ONE_SHOVE_WEIGHTS
     elif level == 2:
-        shove_weights = (0.55, 0.30, 0.15)
+        shove_weights = LEVEL_TWO_SHOVE_WEIGHTS
     else:
-        shove_weights = (0.50, 0.35, 0.15)
+        shove_weights = LEVEL_THREE_PLUS_SHOVE_WEIGHTS
 
     return LevelConfig(
-        target_serves=10 + ((level - 1) * 5),
-        spawn_interval=max(0.75, 3.0 - ((level - 1) * 0.18)),
-        min_walk_speed=16.0 + ((level - 1) * 2.0),
-        max_walk_speed=24.0 + ((level - 1) * 3.0),
+        target_serves=LEVEL_ONE_TARGET_SERVES + ((level - 1) * LEVEL_TARGET_SERVES_STEP),
+        spawn_interval=max(MIN_SPAWN_INTERVAL, LEVEL_ONE_SPAWN_INTERVAL - ((level - 1) * LEVEL_SPAWN_INTERVAL_STEP)),
+        min_walk_speed=LEVEL_ONE_MIN_WALK_SPEED + ((level - 1) * LEVEL_MIN_WALK_SPEED_STEP),
+        max_walk_speed=LEVEL_ONE_MAX_WALK_SPEED + ((level - 1) * LEVEL_MAX_WALK_SPEED_STEP),
         long_shove_weight=shove_weights[0],
         offscreen_shove_weight=shove_weights[1],
         short_shove_weight=shove_weights[2],
@@ -45,19 +112,17 @@ def build_level_config(level_number: int) -> LevelConfig:
 
 
 class Game:
-    MAX_PATRONS_PER_LANE = 3
-    SPAWN_X = -Patron.BODY_WIDTH
-    STARTING_LIVES = 3
-    MAX_LIVES = 99
-    INITIAL_SPAWN_DELAY = 0.35
-    FAIL_FEEDBACK_DURATION = 0.6
-    FAIL_SHAKE_AMPLITUDE = 4
-    BEER_SERVED_SCORE = 10
-    TIP_SCORE = 25
-    LIVES_REMAINING_BONUS = 100
-    TIP_SPAWN_CHANCE = 0.35
-    MIN_DRINK_DURATION = 0.95
-    MAX_DRINK_DURATION = 1.45
+    PATRON_SPAWN_X = -Patron.BODY_WIDTH
+    MAX_PATRONS_PER_LANE = MAX_PATRONS_PER_LANE
+    STARTING_LIVES = STARTING_LIVES
+    MAX_LIVES = MAX_LIVES
+    INITIAL_SPAWN_DELAY = FIRST_PATRON_DELAY
+    FAIL_FEEDBACK_DURATION = FAIL_FEEDBACK_DURATION
+    BEER_SERVED_SCORE = BEER_SERVED_SCORE
+    TIP_SCORE = TIP_SCORE
+    LIVES_REMAINING_BONUS = LIVES_REMAINING_BONUS
+    MIN_DRINK_DURATION = MIN_DRINK_DURATION
+    MAX_DRINK_DURATION = MAX_DRINK_DURATION
 
     def __init__(self) -> None:
         self.scene_renderer = SceneRenderer()
@@ -264,7 +329,7 @@ class Game:
             self.patrons.append(
                 Patron(
                     bar_index=bar_index,
-                    start_x=float(self.SPAWN_X),
+                    start_x=float(self.PATRON_SPAWN_X),
                     walk_speed=base_walk_speed * archetype.walk_speed_multiplier,
                     drink_duration=base_drink_duration * archetype.drink_duration_multiplier,
                     archetype=archetype,
@@ -285,7 +350,7 @@ class Game:
         if not blocking_patrons:
             return True
 
-        spawn_clear_x = self.SPAWN_X + Patron.BODY_WIDTH + Patron.QUEUE_GAP
+        spawn_clear_x = self.PATRON_SPAWN_X + Patron.BODY_WIDTH + Patron.QUEUE_GAP
         return all(patron.x >= spawn_clear_x for patron in blocking_patrons)
 
     def _handle_return_glass_catches(self) -> None:
@@ -381,7 +446,7 @@ class Game:
         self.level_clear_summary: dict[str, int] | None = None
         self.awaiting_level_clear_release = False
         self.patron_rng = build_walk_speed_rng()
-        self.tip_rng = Random(1984)
+        self.tip_rng = Random(TIP_RNG_SEED)
         self._reset_level_progress()
         self._reset_round()
 
@@ -423,15 +488,15 @@ class Game:
         overlay.fill((0, 0, 0, 170))
         surface.blit(overlay, (0, 0))
 
-        title = self.overlay_font.render("GAME OVER", True, pygame.Color("#F5F0E8"))
+        title = self.overlay_font.render("GAME OVER", True, OVERLAY_TEXT_COLOR)
         prompt = self.detail_font.render(
             "PRESS ANY KEY TO RESTART",
             True,
-            pygame.Color("#F5F0E8"),
+            OVERLAY_TEXT_COLOR,
         )
 
-        title_rect = title.get_rect(center=(surface.get_width() // 2, 138))
-        prompt_rect = prompt.get_rect(center=(surface.get_width() // 2, 160))
+        title_rect = title.get_rect(center=(surface.get_width() // 2, GAME_OVER_TITLE_Y))
+        prompt_rect = prompt.get_rect(center=(surface.get_width() // 2, GAME_OVER_PROMPT_Y))
         surface.blit(title, title_rect)
         surface.blit(prompt, prompt_rect)
 
@@ -441,47 +506,47 @@ class Game:
             return
 
         overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
+        overlay.fill(LEVEL_CLEAR_OVERLAY_COLOR)
         surface.blit(overlay, (0, 0))
 
         title = self.overlay_font.render(
             f"LEVEL {summary['level']:02d} CLEAR",
             True,
-            pygame.Color("#F5F0E8"),
+            OVERLAY_TEXT_COLOR,
         )
         prompt = self.detail_font.render(
             f"PRESS ANY KEY FOR LEVEL {self.current_level + 1:02d}",
             True,
-            pygame.Color("#F5F0E8"),
+            OVERLAY_TEXT_COLOR,
         )
         beer_line = self.detail_font.render(
             f"BEER SCORE   {summary['beer_score']:04d}",
             True,
-            pygame.Color("#F5F0E8"),
+            OVERLAY_TEXT_COLOR,
         )
         tips_line = self.detail_font.render(
             f"TIPS         {summary['tips_score']:04d}",
             True,
-            pygame.Color("#F5F0E8"),
+            OVERLAY_TEXT_COLOR,
         )
         lives_line = self.detail_font.render(
             f"LIVES BONUS  {summary['lives_bonus']:04d}",
             True,
-            pygame.Color("#F5F0E8"),
+            OVERLAY_TEXT_COLOR,
         )
         total_line = self.detail_font.render(
             f"TOTAL SCORE  {summary['total_score']:06d}",
             True,
-            pygame.Color("#F5F0E8"),
+            OVERLAY_TEXT_COLOR,
         )
 
         center_x = surface.get_width() // 2
-        surface.blit(title, title.get_rect(center=(center_x, 118)))
-        surface.blit(beer_line, beer_line.get_rect(center=(center_x, 146)))
-        surface.blit(tips_line, tips_line.get_rect(center=(center_x, 162)))
-        surface.blit(lives_line, lives_line.get_rect(center=(center_x, 178)))
-        surface.blit(total_line, total_line.get_rect(center=(center_x, 198)))
-        surface.blit(prompt, prompt.get_rect(center=(center_x, 224)))
+        surface.blit(title, title.get_rect(center=(center_x, LEVEL_CLEAR_TITLE_Y)))
+        surface.blit(beer_line, beer_line.get_rect(center=(center_x, LEVEL_CLEAR_BEER_Y)))
+        surface.blit(tips_line, tips_line.get_rect(center=(center_x, LEVEL_CLEAR_TIPS_Y)))
+        surface.blit(lives_line, lives_line.get_rect(center=(center_x, LEVEL_CLEAR_LIVES_Y)))
+        surface.blit(total_line, total_line.get_rect(center=(center_x, LEVEL_CLEAR_TOTAL_Y)))
+        surface.blit(prompt, prompt.get_rect(center=(center_x, LEVEL_CLEAR_PROMPT_Y)))
 
     def _finish_fail_feedback(self) -> None:
         if self.pending_game_over:
@@ -498,26 +563,19 @@ class Game:
             return
 
         overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-        overlay.fill((32, 0, 0, 80))
+        overlay.fill(FAIL_OVERLAY_COLOR)
         surface.blit(overlay, (0, 0))
 
-        title = self.overlay_font.render(self.fail_message, True, pygame.Color("#F5F0E8"))
-        title_rect = title.get_rect(center=(surface.get_width() // 2, 156))
+        title = self.overlay_font.render(self.fail_message, True, OVERLAY_TEXT_COLOR)
+        title_rect = title.get_rect(center=(surface.get_width() // 2, FAIL_MESSAGE_Y))
         surface.blit(title, title_rect)
 
     def _fail_shake_offset(self) -> tuple[int, int]:
         if self.fail_feedback_timer <= 0.0:
             return (0, 0)
 
-        shake_pattern = (
-            (0, 0),
-            (self.FAIL_SHAKE_AMPLITUDE, -2),
-            (-self.FAIL_SHAKE_AMPLITUDE, 2),
-            (2, -1),
-            (-2, 1),
-        )
-        frame_index = int((self.FAIL_FEEDBACK_DURATION - self.fail_feedback_timer) * 30)
-        return shake_pattern[frame_index % len(shake_pattern)]
+        frame_index = int((self.FAIL_FEEDBACK_DURATION - self.fail_feedback_timer) * FAIL_SHAKE_FPS)
+        return FAIL_SHAKE_PATTERN[frame_index % len(FAIL_SHAKE_PATTERN)]
 
     def _any_key_pressed(self) -> bool:
         return any(pygame.key.get_pressed())
