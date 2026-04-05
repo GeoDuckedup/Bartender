@@ -6,12 +6,9 @@ from random import Random
 
 import pygame
 
-from glass import ReturningGlass
+from glass import ReturningGlass, draw_glass_with_fill
 from renderer import (
     BAR_WIDTH,
-    GLASS_FILL_COLOR,
-    GLASS_FOAM_COLOR,
-    GLASS_OUTLINE_COLOR,
     LANE_CENTERS,
     RIGHT_WALL_LEFT,
     lane_surface_glass_y,
@@ -48,10 +45,6 @@ PATRON_GLASS_WIDTH = 14
 PATRON_GLASS_HEIGHT = 20
 PATRON_OFFSCREEN_DRINK_MARGIN = 8
 PATRON_RETURN_GLASS_X_OFFSET = PATRON_BODY_WIDTH
-PATRON_HELD_GLASS_OUTLINE = 2
-PATRON_HELD_GLASS_PADDING = 2
-PATRON_HELD_GLASS_FULL_FOAM_THRESHOLD = 0.99
-PATRON_HELD_GLASS_FOAM_HEIGHT = 4
 
 # Patron lane bounds:
 # Reentry and offscreen drink positions live here so shove tuning stays readable.
@@ -286,15 +279,26 @@ class Patron:
         pygame.draw.rect(surface, self.archetype.body_color, body_rect)
         pygame.draw.rect(surface, self.archetype.hat_color, hat_rect)
 
-    def draw_held_glass(self, surface: pygame.Surface) -> None:
+    def draw_held_glass(
+        self,
+        surface: pygame.Surface,
+        *,
+        fill_color: pygame.Color | None = None,
+    ) -> None:
         if self.state not in (PatronState.RECEIVING, PatronState.DRINKING):
             return
-        self._draw_held_glass(surface, self.body_rect.move(0, self.DRAW_Y_OFFSET))
+        self._draw_held_glass(
+            surface,
+            self.body_rect.move(0, self.DRAW_Y_OFFSET),
+            fill_color=fill_color,
+        )
 
     def _draw_held_glass(
         self,
         surface: pygame.Surface,
         body_rect: pygame.Rect,
+        *,
+        fill_color: pygame.Color | None = None,
     ) -> None:
         glass_rect = pygame.Rect(
             body_rect.right,
@@ -302,28 +306,13 @@ class Patron:
             self.GLASS_WIDTH,
             self.GLASS_HEIGHT,
         )
-        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, PATRON_HELD_GLASS_OUTLINE)
-        fill_ratio = max(0.0, min(1.0, self.held_glass_fill_ratio))
-        if fill_ratio > 0.0:
-            inner_width = self.GLASS_WIDTH - (PATRON_HELD_GLASS_PADDING * 2)
-            inner_height = self.GLASS_HEIGHT - (PATRON_HELD_GLASS_PADDING * 2)
-            fill_height = max(1, round(inner_height * fill_ratio))
-            fill_rect = pygame.Rect(
-                glass_rect.left + PATRON_HELD_GLASS_PADDING,
-                glass_rect.bottom - PATRON_HELD_GLASS_PADDING - fill_height,
-                inner_width,
-                fill_height,
-            )
-            pygame.draw.rect(surface, GLASS_FILL_COLOR, fill_rect)
-
-        if fill_ratio >= PATRON_HELD_GLASS_FULL_FOAM_THRESHOLD:
-            foam_rect = pygame.Rect(
-                glass_rect.left + 1,
-                glass_rect.top + 1,
-                self.GLASS_WIDTH - PATRON_HELD_GLASS_OUTLINE,
-                PATRON_HELD_GLASS_FOAM_HEIGHT,
-            )
-            pygame.draw.rect(surface, GLASS_FOAM_COLOR, foam_rect)
+        draw_glass_with_fill(
+            surface,
+            glass_rect,
+            fill_ratio=self.held_glass_fill_ratio,
+            show_top_foam=True,
+            fill_color=fill_color,
+        )
 
     def _choose_receive_target(self) -> tuple[float, bool]:
         roll = _patron_behavior_rng.random()

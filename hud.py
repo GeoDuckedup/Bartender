@@ -13,19 +13,20 @@ from renderer import (
 
 # HUD layout / typography tuning:
 # Keep all HUD spacing and type sizes here so UI tweaks stay out of draw logic.
-HUD_MAIN_FONT_SIZE = 16
-HUD_CENTER_FONT_SIZE = 12
+HUD_FONT_SIZE = 14
 HUD_SIDE_PADDING = 12
-HUD_LEVEL_Y = 12
-HUD_SERVED_Y = 29
+HUD_CENTER_X = LOGICAL_WIDTH // 2
+HUD_LEVEL_Y = 14
+HUD_SERVED_Y = 32
+HUD_RIGHT_TOP_Y = 14
+HUD_RIGHT_BOTTOM_Y = 32
 HUD_BORDER_Y = HUD_HEIGHT - 1
 HUD_BORDER_THICKNESS = 2
 
 
 class HUDRenderer:
     def __init__(self) -> None:
-        self.main_font = pygame.font.SysFont("couriernew", HUD_MAIN_FONT_SIZE, bold=True)
-        self.center_font = pygame.font.SysFont("couriernew", HUD_CENTER_FONT_SIZE, bold=True)
+        self.font = pygame.font.SysFont("couriernew", HUD_FONT_SIZE, bold=True)
 
     def draw(
         self,
@@ -35,6 +36,7 @@ class HUDRenderer:
         current_level: int,
         served: int = 0,
         target: int = 8,
+        cash_text: str = "$0.00",
         score: int = 0,
     ) -> None:
         hud_rect = pygame.Rect(0, 0, LOGICAL_WIDTH, HUD_HEIGHT)
@@ -50,7 +52,7 @@ class HUDRenderer:
         self._blit_text(
             surface,
             f"LIVES {lives:02d}",
-            self.main_font,
+            self.font,
             x=HUD_SIDE_PADDING,
             y=HUD_HEIGHT // 2,
             anchor="midleft",
@@ -58,25 +60,33 @@ class HUDRenderer:
         self._blit_text(
             surface,
             f"LEVEL {current_level:02d}",
-            self.center_font,
-            x=LOGICAL_WIDTH // 2,
+            self.font,
+            x=HUD_CENTER_X,
             y=HUD_LEVEL_Y,
             anchor="center",
         )
         self._blit_text(
             surface,
             f"SERVED {served:02d}/{target:02d}",
-            self.center_font,
-            x=LOGICAL_WIDTH // 2,
+            self.font,
+            x=HUD_CENTER_X,
             y=HUD_SERVED_Y,
             anchor="center",
         )
         self._blit_text(
             surface,
-            f"SCORE {score:06d}",
-            self.main_font,
+            f"CASH {cash_text}",
+            self.font,
             x=LOGICAL_WIDTH - HUD_SIDE_PADDING,
-            y=HUD_HEIGHT // 2,
+            y=HUD_RIGHT_TOP_Y,
+            anchor="midright",
+        )
+        self._blit_text(
+            surface,
+            f"SCORE {score:06d}",
+            self.font,
+            x=LOGICAL_WIDTH - HUD_SIDE_PADDING,
+            y=HUD_RIGHT_BOTTOM_Y,
             anchor="midright",
         )
 

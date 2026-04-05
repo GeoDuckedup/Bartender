@@ -4,7 +4,7 @@ from enum import Enum, auto
 
 import pygame
 
-from glass import FlyingGlass, TapGlass
+from glass import FlyingGlass, TapGlass, draw_glass_with_fill
 from renderer import (
     BAR_COUNT,
     BARTENDER_APRON_COLOR,
@@ -12,11 +12,7 @@ from renderer import (
     BARTENDER_HEAD_COLOR,
     BARTENDER_WALK_MAX_X,
     BARTENDER_WALK_MIN_X,
-    GLASS_FILL_COLOR,
-    GLASS_FOAM_COLOR,
-    GLASS_OUTLINE_COLOR,
     LANE_CENTERS,
-    lane_surface_glass_y,
     TAP_HOME_X,
     TAP_GLASS_X,
 )
@@ -37,6 +33,17 @@ BARTENDER_APRON_HEIGHT = 28
 BARTENDER_FEET_OFFSET = 16
 BARTENDER_APRON_Y_OFFSET = 2
 BARTENDER_CATCH_RECT_PADDING = (10, 6)
+BARTENDER_HAT_WIDTH = 22
+BARTENDER_HAT_HEIGHT = 8
+BARTENDER_HAT_BRIM_HEIGHT = 3
+BARTENDER_HAT_CROWN_INSET = 4
+BARTENDER_HAT_Y_OFFSET = 2
+BARTENDER_HAT_COLOR = pygame.Color("#2E2B25")
+BARTENDER_BOWTIE_WIDTH = 12
+BARTENDER_BOWTIE_HEIGHT = 6
+BARTENDER_BOWTIE_CENTER_SIZE = 4
+BARTENDER_BOWTIE_Y_OFFSET = 8
+BARTENDER_BOWTIE_COLOR = pygame.Color("#A3242B")
 
 # Bartender serve animation tuning:
 # This entire block is visual-only. It should never change the actual
@@ -86,8 +93,13 @@ class Bartender:
         self.bar_index = 0
         self.x = float(TAP_HOME_X)
         self.tap_glass = TapGlass()
+        self.walk_speed = self.WALK_SPEED
+        self.catch_rect_padding = BARTENDER_CATCH_RECT_PADDING
+        self.flying_glass_speed = FlyingGlass.speed
         self.flying_glasses: list[FlyingGlass] = []
         self.missed_flying_glass = False
+        self.has_hat = False
+        self.has_bowtie = False
         self.pour_state = PourState.IDLE
         self.serve_visual_timer = 0.0
         self.serve_visual_bar_index = 0
@@ -128,7 +140,7 @@ class Bartender:
     @property
     def catch_rect(self) -> pygame.Rect:
         body_rect = self.body_rect
-        return body_rect.inflate(*BARTENDER_CATCH_RECT_PADDING)
+        return body_rect.inflate(*self.catch_rect_padding)
 
     def move_up(self) -> None:
         self.bar_index = (self.bar_index - 1) % BAR_COUNT
@@ -143,11 +155,11 @@ class Bartender:
         self._clear_glass_if_away()
 
     def walk_left(self, dt: float) -> None:
-        self.x = max(BARTENDER_WALK_MIN_X, self.x - (self.WALK_SPEED * dt))
+        self.x = max(BARTENDER_WALK_MIN_X, self.x - (self.walk_speed * dt))
         self._clear_glass_if_away()
 
     def walk_right(self, dt: float) -> None:
-        self.x = min(BARTENDER_WALK_MAX_X, self.x + (self.WALK_SPEED * dt))
+        self.x = min(BARTENDER_WALK_MAX_X, self.x + (self.walk_speed * dt))
         self._clear_glass_if_away()
 
     def stop_walking(self) -> None:
@@ -174,6 +186,7 @@ class Bartender:
             launched_glass = FlyingGlass(
                 x=float(TAP_GLASS_X),
                 bar_index=self.bar_index,
+                speed=self.flying_glass_speed,
             )
             self.flying_glasses.append(launched_glass)
             self.serve_visual_timer = self.SERVE_VISUAL_DURATION
@@ -221,7 +234,12 @@ class Bartender:
         self.missed_flying_glass = False
         return missed_flying_glass
 
-    def draw_flying_glasses(self, surface: pygame.Surface) -> None:
+    def draw_flying_glasses(
+        self,
+        surface: pygame.Surface,
+        *,
+        fill_color: pygame.Color | None = None,
+    ) -> None:
         for flying_glass in self.flying_glasses:
             if (
                 self.is_serving_visually
@@ -229,13 +247,18 @@ class Bartender:
                 and self._serve_elapsed_fraction() < self.SERVE_MOTION_FRACTION
             ):
                 continue
-            flying_glass.draw(surface)
+            flying_glass.draw(surface, fill_color=fill_color)
 
-    def draw_tap_glass(self, surface: pygame.Surface) -> None:
+    def draw_tap_glass(
+        self,
+        surface: pygame.Surface,
+        *,
+        fill_color: pygame.Color | None = None,
+    ) -> None:
         if self.pour_state is PourState.POURING and self.is_at_tap:
             body_rect = self.body_rect
             glass_left = self._right_glass_left(body_rect)
-            self.tap_glass.draw(surface, self.bar_index, left=glass_left)
+            self.tap_glass.draw(surface, self.bar_index, left=glass_left, fill_color=fill_color)
             self._draw_arm(
                 surface,
                 shoulder_x=body_rect.left + self.ARM_START_OFFSET_X,
@@ -243,7 +266,12 @@ class Bartender:
                 arm_y=body_rect.top + self.ARM_Y_OFFSET,
             )
 
-    def draw_serve_visual(self, surface: pygame.Surface) -> None:
+    def draw_serve_visual(
+        self,
+        surface: pygame.Surface,
+        *,
+        fill_color: pygame.Color | None = None,
+    ) -> None:
         if self.is_serving_visually and self.serve_visual_glass is not None:
             elapsed_fraction = self._serve_elapsed_fraction()
             motion_progress = self._serve_motion_progress(elapsed_fraction)
@@ -252,23 +280,19 @@ class Bartender:
                 + ((self.serve_visual_end_x - self.serve_visual_start_x) * motion_progress)
             )
             if elapsed_fraction < self.SERVE_MOTION_FRACTION:
-                glass_top = lane_surface_glass_y(self.serve_visual_bar_index, TapGlass.HEIGHT)
-                glass_rect = pygame.Rect(glass_left, glass_top, TapGlass.WIDTH, TapGlass.HEIGHT)
-                pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, SERVE_OUTLINE_THICKNESS)
-                fill_rect = pygame.Rect(
-                    glass_rect.left + SERVE_GLASS_PADDING,
-                    glass_rect.top + SERVE_GLASS_PADDING,
-                    TapGlass.WIDTH - (SERVE_GLASS_PADDING * 2),
-                    TapGlass.HEIGHT - (SERVE_GLASS_PADDING * 2),
+                glass_rect = pygame.Rect(
+                    glass_left,
+                    self.serve_visual_glass.rect.top,
+                    TapGlass.WIDTH,
+                    TapGlass.HEIGHT,
                 )
-                pygame.draw.rect(surface, GLASS_FILL_COLOR, fill_rect)
-                foam_rect = pygame.Rect(
-                    glass_rect.left + 1,
-                    glass_rect.top + 1,
-                    TapGlass.WIDTH - SERVE_OUTLINE_THICKNESS,
-                    SERVE_GLASS_FOAM_HEIGHT,
+                draw_glass_with_fill(
+                    surface,
+                    glass_rect,
+                    fill_ratio=1.0,
+                    show_top_foam=True,
+                    fill_color=fill_color,
                 )
-                pygame.draw.rect(surface, GLASS_FOAM_COLOR, foam_rect)
             self._draw_arm(
                 surface,
                 shoulder_x=round(
@@ -313,6 +337,10 @@ class Bartender:
         pygame.draw.rect(surface, BARTENDER_BODY_COLOR, body_rect)
         pygame.draw.rect(surface, BARTENDER_APRON_COLOR, apron_rect)
         pygame.draw.rect(surface, BARTENDER_HEAD_COLOR, head_rect)
+        if self.has_bowtie:
+            self._draw_bowtie(surface, body_rect)
+        if self.has_hat:
+            self._draw_hat(surface, head_rect)
 
     def _right_glass_left(self, body_rect: pygame.Rect) -> int:
         return body_rect.left + self.RIGHT_GLASS_OFFSET_X
@@ -339,6 +367,45 @@ class Bartender:
         )
         pygame.draw.rect(surface, BARTENDER_HEAD_COLOR, arm_rect)
         pygame.draw.rect(surface, BARTENDER_HEAD_COLOR, hand_rect)
+
+    def _draw_hat(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
+        brim_rect = pygame.Rect(
+            head_rect.centerx - (BARTENDER_HAT_WIDTH // 2),
+            head_rect.top - BARTENDER_HAT_Y_OFFSET,
+            BARTENDER_HAT_WIDTH,
+            BARTENDER_HAT_BRIM_HEIGHT,
+        )
+        crown_rect = pygame.Rect(
+            brim_rect.left + BARTENDER_HAT_CROWN_INSET,
+            brim_rect.top - BARTENDER_HAT_HEIGHT,
+            brim_rect.width - (BARTENDER_HAT_CROWN_INSET * 2),
+            BARTENDER_HAT_HEIGHT,
+        )
+        pygame.draw.rect(surface, BARTENDER_HAT_COLOR, crown_rect)
+        pygame.draw.rect(surface, BARTENDER_HAT_COLOR, brim_rect)
+
+    def _draw_bowtie(self, surface: pygame.Surface, body_rect: pygame.Rect) -> None:
+        center_y = body_rect.top + BARTENDER_BOWTIE_Y_OFFSET
+        center_x = body_rect.centerx
+        left_wing = [
+            (center_x - (BARTENDER_BOWTIE_CENTER_SIZE // 2), center_y),
+            (center_x - (BARTENDER_BOWTIE_WIDTH // 2), center_y - (BARTENDER_BOWTIE_HEIGHT // 2)),
+            (center_x - (BARTENDER_BOWTIE_WIDTH // 2), center_y + (BARTENDER_BOWTIE_HEIGHT // 2)),
+        ]
+        right_wing = [
+            (center_x + (BARTENDER_BOWTIE_CENTER_SIZE // 2), center_y),
+            (center_x + (BARTENDER_BOWTIE_WIDTH // 2), center_y - (BARTENDER_BOWTIE_HEIGHT // 2)),
+            (center_x + (BARTENDER_BOWTIE_WIDTH // 2), center_y + (BARTENDER_BOWTIE_HEIGHT // 2)),
+        ]
+        center_rect = pygame.Rect(
+            center_x - (BARTENDER_BOWTIE_CENTER_SIZE // 2),
+            center_y - (BARTENDER_BOWTIE_HEIGHT // 2),
+            BARTENDER_BOWTIE_CENTER_SIZE,
+            BARTENDER_BOWTIE_HEIGHT,
+        )
+        pygame.draw.polygon(surface, BARTENDER_BOWTIE_COLOR, left_wing)
+        pygame.draw.polygon(surface, BARTENDER_BOWTIE_COLOR, right_wing)
+        pygame.draw.rect(surface, BARTENDER_BOWTIE_COLOR, center_rect)
 
     def _serve_elapsed_fraction(self) -> float:
         if self.SERVE_VISUAL_DURATION <= 0.0:
