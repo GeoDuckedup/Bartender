@@ -113,16 +113,6 @@ def build_level_config(level_number: int) -> LevelConfig:
 
 class Game:
     PATRON_SPAWN_X = -Patron.BODY_WIDTH
-    MAX_PATRONS_PER_LANE = MAX_PATRONS_PER_LANE
-    STARTING_LIVES = STARTING_LIVES
-    MAX_LIVES = MAX_LIVES
-    INITIAL_SPAWN_DELAY = FIRST_PATRON_DELAY
-    FAIL_FEEDBACK_DURATION = FAIL_FEEDBACK_DURATION
-    BEER_SERVED_SCORE = BEER_SERVED_SCORE
-    TIP_SCORE = TIP_SCORE
-    LIVES_REMAINING_BONUS = LIVES_REMAINING_BONUS
-    MIN_DRINK_DURATION = MIN_DRINK_DURATION
-    MAX_DRINK_DURATION = MAX_DRINK_DURATION
 
     def __init__(self) -> None:
         self.scene_renderer = SceneRenderer()
@@ -263,7 +253,7 @@ class Game:
             ):
                 self._maybe_spawn_tip(frontmost_patron)
                 frontmost_patron.receive_beer(flying_glass.fill_ratio)
-                self.score += self.BEER_SERVED_SCORE
+                self.score += BEER_SERVED_SCORE
                 self.served_count += 1
                 if self.served_count >= self.level_config.target_serves:
                     self._enter_level_clear()
@@ -312,7 +302,7 @@ class Game:
         for offset in range(BAR_COUNT):
             bar_index = (self.next_spawn_bar + offset) % BAR_COUNT
             lane_patrons = [patron for patron in self.patrons if patron.bar_index == bar_index]
-            if len(lane_patrons) >= self.MAX_PATRONS_PER_LANE:
+            if len(lane_patrons) >= MAX_PATRONS_PER_LANE:
                 continue
             if not self._lane_has_spawn_room(lane_patrons):
                 continue
@@ -323,8 +313,8 @@ class Game:
                 self.level_config.max_walk_speed,
             )
             base_drink_duration = self.patron_rng.uniform(
-                self.MIN_DRINK_DURATION,
-                self.MAX_DRINK_DURATION,
+                MIN_DRINK_DURATION,
+                MAX_DRINK_DURATION,
             )
             self.patrons.append(
                 Patron(
@@ -393,8 +383,8 @@ class Game:
                 tip.bar_index == self.bartender.bar_index
                 and tip.rect.colliderect(self.bartender.body_rect)
             ):
-                self.score += self.TIP_SCORE
-                self.tip_score += self.TIP_SCORE
+                self.score += TIP_SCORE
+                self.tip_score += TIP_SCORE
                 self.tips_collected += 1
                 continue
             active_tips.append(tip)
@@ -421,7 +411,7 @@ class Game:
     def _lose_life(self, fail_reason: str) -> None:
         self.lives = max(0, self.lives - 1)
         self.fail_message = fail_reason
-        self.fail_feedback_timer = self.FAIL_FEEDBACK_DURATION
+        self.fail_feedback_timer = FAIL_FEEDBACK_DURATION
         self.pending_game_over = self.lives == 0
 
     def _reset_round(self) -> None:
@@ -430,7 +420,7 @@ class Game:
         self.tips = []
         self.returning_glasses = []
         self.missed_return_glass = False
-        self.spawn_timer = max(0.0, self.level_config.spawn_interval - self.INITIAL_SPAWN_DELAY)
+        self.spawn_timer = max(0.0, self.level_config.spawn_interval - FIRST_PATRON_DELAY)
         self.next_spawn_bar = self.patron_rng.randrange(BAR_COUNT)
         self.fail_feedback_timer = 0.0
         self.fail_message = None
@@ -439,7 +429,7 @@ class Game:
     def _reset_game(self) -> None:
         self.current_level = 1
         self.level_config = build_level_config(self.current_level)
-        self.lives = self.STARTING_LIVES
+        self.lives = STARTING_LIVES
         self.score = 0
         self.game_over = False
         self.level_cleared = False
@@ -451,7 +441,7 @@ class Game:
         self._reset_round()
 
     def _advance_to_next_round(self) -> None:
-        self.lives = min(self.MAX_LIVES, self.lives + 1)
+        self.lives = min(MAX_LIVES, self.lives + 1)
         self.current_level += 1
         self.level_config = build_level_config(self.current_level)
         self.level_cleared = False
@@ -469,9 +459,9 @@ class Game:
         if self.level_cleared:
             return
 
-        beer_score = self.served_count * self.BEER_SERVED_SCORE
+        beer_score = self.served_count * BEER_SERVED_SCORE
         tips_score = self.tip_score
-        lives_bonus = self.lives * self.LIVES_REMAINING_BONUS
+        lives_bonus = self.lives * LIVES_REMAINING_BONUS
         self.score += lives_bonus
         self.level_cleared = True
         self.awaiting_level_clear_release = True
@@ -485,7 +475,7 @@ class Game:
 
     def _draw_game_over_overlay(self, surface: pygame.Surface) -> None:
         overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 170))
+        overlay.fill(GAME_OVER_OVERLAY_COLOR)
         surface.blit(overlay, (0, 0))
 
         title = self.overlay_font.render("GAME OVER", True, OVERLAY_TEXT_COLOR)
@@ -574,7 +564,7 @@ class Game:
         if self.fail_feedback_timer <= 0.0:
             return (0, 0)
 
-        frame_index = int((self.FAIL_FEEDBACK_DURATION - self.fail_feedback_timer) * FAIL_SHAKE_FPS)
+        frame_index = int((FAIL_FEEDBACK_DURATION - self.fail_feedback_timer) * FAIL_SHAKE_FPS)
         return FAIL_SHAKE_PATTERN[frame_index % len(FAIL_SHAKE_PATTERN)]
 
     def _any_key_pressed(self) -> bool:

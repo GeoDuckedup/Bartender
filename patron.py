@@ -8,6 +8,7 @@ import pygame
 
 from glass import ReturningGlass
 from renderer import (
+    BAR_WIDTH,
     GLASS_FILL_COLOR,
     GLASS_FOAM_COLOR,
     GLASS_OUTLINE_COLOR,
@@ -27,8 +28,9 @@ PATRON_MAX_WALK_SPEED = 52.0
 PATRON_DRINK_VARIATION_MIN = 0.85
 PATRON_DRINK_VARIATION_MAX = 1.15
 PATRON_SHORT_PUSHBACK_DISTANCE = 40.0
-PATRON_SHORT_MIN_VISIBLE_X = 88.0
 PATRON_SHORT_FALLBACK_PUSHBACK = 18.0
+PATRON_VISIBLE_RECEIVE_ZONE_RATIO = 0.20
+PATRON_VISIBLE_RECEIVE_MAX_X = BAR_WIDTH * PATRON_VISIBLE_RECEIVE_ZONE_RATIO
 
 # Patron body / draw tuning:
 # DRAW_Y_OFFSET is visual-only; it helps hide more of the body behind the bar.
@@ -146,7 +148,7 @@ class Patron:
     DRINK_DELAY_VARIATION_MIN = PATRON_DRINK_VARIATION_MIN
     DRINK_DELAY_VARIATION_MAX = PATRON_DRINK_VARIATION_MAX
     SHORT_PUSHBACK_DISTANCE = PATRON_SHORT_PUSHBACK_DISTANCE
-    SHORT_MIN_VISIBLE_X = PATRON_SHORT_MIN_VISIBLE_X
+    VISIBLE_RECEIVE_MAX_X = PATRON_VISIBLE_RECEIVE_MAX_X
 
     def __init__(
         self,
@@ -300,7 +302,6 @@ class Patron:
             self.GLASS_WIDTH,
             self.GLASS_HEIGHT,
         )
-        pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, 2)
         pygame.draw.rect(surface, GLASS_OUTLINE_COLOR, glass_rect, PATRON_HELD_GLASS_OUTLINE)
         fill_ratio = max(0.0, min(1.0, self.held_glass_fill_ratio))
         if fill_ratio > 0.0:
@@ -333,7 +334,10 @@ class Patron:
         if roll < offscreen_cutoff:
             return self.OFFSCREEN_DRINK_X, True
 
-        short_target_x = max(self.SHORT_MIN_VISIBLE_X, self.x - self.SHORT_PUSHBACK_DISTANCE)
+        short_target_x = _patron_behavior_rng.uniform(
+            self.LEFT_EDGE_X,
+            self.VISIBLE_RECEIVE_MAX_X,
+        )
         if short_target_x >= self.x:
             short_target_x = max(self.LEFT_EDGE_X, self.x - PATRON_SHORT_FALLBACK_PUSHBACK)
         return min(self.x, short_target_x), False
