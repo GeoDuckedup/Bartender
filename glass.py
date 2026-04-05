@@ -26,9 +26,9 @@ FULL_FOAM_THRESHOLD = 0.99
 
 # Pour / travel tuning:
 # These are gameplay-facing speeds for fill, outgoing mugs, and returning empties.
-TAP_FILL_DURATION = 0.3
-FLYING_GLASS_SPEED = 210.0
-RETURNING_GLASS_SPEED = 50.0
+TAP_FILL_DURATION = 0.20
+FLYING_GLASS_SPEED = 190.0
+RETURNING_GLASS_SPEED = 40.0
 
 # Collision-only vertical alignment:
 # Drawing uses renderer surface anchors, but collisions still use this
