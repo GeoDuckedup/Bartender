@@ -530,13 +530,17 @@ class Game:
             pygame.K_DOWN,
             pygame.K_LEFT,
             pygame.K_RIGHT,
+            pygame.K_a,
+            pygame.K_d,
+            pygame.K_w,
+            pygame.K_s,
         )
         if is_arrow and self.bartender.is_pouring:
             self.bartender.cancel_pour()
 
-        if event.key == pygame.K_UP:
+        if event.key in (pygame.K_UP, pygame.K_w):
             self.bartender.move_up()
-        elif event.key == pygame.K_DOWN:
+        elif event.key in (pygame.K_DOWN, pygame.K_s):
             self.bartender.move_down()
 
     def update(self, dt: float) -> None:
@@ -557,9 +561,11 @@ class Game:
 
         if not self.bartender.is_pouring:
             pressed = pygame.key.get_pressed()
-            if pressed[pygame.K_LEFT] and not pressed[pygame.K_RIGHT]:
+            moving_left = pressed[pygame.K_LEFT] or pressed[pygame.K_a]
+            moving_right = pressed[pygame.K_RIGHT] or pressed[pygame.K_d]
+            if moving_left and not moving_right:
                 self.bartender.walk_left(dt)
-            elif pressed[pygame.K_RIGHT] and not pressed[pygame.K_LEFT]:
+            elif moving_right and not moving_left:
                 self.bartender.walk_right(dt)
             else:
                 self.bartender.stop_walking()
