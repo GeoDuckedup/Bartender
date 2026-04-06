@@ -332,8 +332,8 @@ class Patron:
         return min(self.x, short_target_x), False
 
 
-def build_walk_speed_rng() -> Random:
-    return Random(WALK_SPEED_RNG_SEED)
+def build_walk_speed_rng(seed: int | None = None) -> Random:
+    return Random(seed)
 
 
 _patron_behavior_rng = Random(PATRON_BEHAVIOR_RNG_SEED)

@@ -99,6 +99,8 @@ DRINK_SCENE_CONTINUE_BONUS_COLOR = pygame.Color("#E7C05A")
 DRINK_SCENE_SIGN_Y = 68
 DRINK_SCENE_SIGN_WIDTH = 300
 DRINK_SCENE_SIGN_HEIGHT = 52
+DRINK_SCENE_CASH_X_OFFSET = 6
+DRINK_SCENE_CASH_Y_OFFSET = 12
 DRINK_SCENE_BAR_WIDTH = 344
 DRINK_SCENE_BAR_HEIGHT = 68
 DRINK_SCENE_BAR_Y = 208
@@ -265,7 +267,7 @@ class RunModifiers:
 
 QUICK_POUR_UPGRADE = UpgradeDefinition(
     id="quick_pour",
-    name="Quick Pour",
+    name="Quiker Pour",
     description="Fill beers faster.",
     effect_type="quick_pour",
     base_cost=3.0,
@@ -279,7 +281,7 @@ QUICK_POUR_UPGRADE = UpgradeDefinition(
 
 FAST_SERVE_UPGRADE = UpgradeDefinition(
     id="fast_serve",
-    name="Fast Serve",
+    name="Faster Serve",
     description="Launch beers faster.",
     effect_type="fast_serve",
     base_cost=3.0,
@@ -293,7 +295,7 @@ FAST_SERVE_UPGRADE = UpgradeDefinition(
 
 QUICK_FEET_UPGRADE = UpgradeDefinition(
     id="quick_feet",
-    name="Quick Feet",
+    name="Quicker Feet",
     description="Move faster between catches and pours.",
     effect_type="quick_feet",
     base_cost=4.5,
@@ -307,7 +309,7 @@ QUICK_FEET_UPGRADE = UpgradeDefinition(
 
 LONG_REACH_UPGRADE = UpgradeDefinition(
     id="long_reach",
-    name="Long Reach",
+    name="Longer Reach",
     description="Catch empties with a wider reach.",
     effect_type="long_reach",
     base_cost=6.0,
@@ -322,28 +324,28 @@ LONG_REACH_UPGRADE = UpgradeDefinition(
 LUCKY_TIPS_UPGRADE = UpgradeDefinition(
     id="lucky_tips",
     name="Lucky Tips",
-    description="Increase tip drop chance.",
+    description="Increase tip drop chance for the next round.",
     effect_type="lucky_tips",
     base_cost=6.0,
     cost_per_level=2.5,
     base_bonus=0.075,
     bonus_per_level=0.075,
     min_level=2,
-    max_stacks=6,
+    max_stacks=99,
     weight=3,
 )
 
 BIGGER_TIPS_UPGRADE = UpgradeDefinition(
     id="bigger_tips",
     name="Bigger Tips",
-    description="Each tip is worth more cash.",
+    description="Each tip is worth more cash for the next round.",
     effect_type="bigger_tips",
     base_cost=7.5,
     cost_per_level=4.5,
     base_bonus=0.0,
     bonus_per_level=1.5,
     min_level=3,
-    max_stacks=5,
+    max_stacks=99,
     weight=2,
 )
 
@@ -783,6 +785,7 @@ class Game:
 
     def _lose_life(self, fail_reason: str) -> None:
         self._clear_active_round_beer_theme()
+        self._clear_active_round_tip_modifiers()
         self.lives = max(0, self.lives - 1)
         self.fail_message = fail_reason
         self.fail_feedback_timer = FAIL_FEEDBACK_DURATION
@@ -815,6 +818,10 @@ class Game:
         self.run_bartender_has_bowtie = False
         self.pending_next_round_beer_theme: str | None = None
         self.active_round_beer_theme: str | None = None
+        self.pending_next_round_lucky_tips_chance_bonus = 0.0
+        self.active_round_lucky_tips_chance_bonus = 0.0
+        self.pending_next_round_bigger_tips_cash_bonus = 0.0
+        self.active_round_bigger_tips_cash_bonus = 0.0
         self.round_bartender_has_hat = False
         self.round_bartender_has_bowtie = False
         self.first_round_cosmetic_test_pending = ENABLE_FIRST_ROUND_COSMETIC_TEST
@@ -841,6 +848,7 @@ class Game:
         self.current_level += 1
         self.level_config = build_level_config(self.current_level)
         self._activate_pending_round_beer_theme()
+        self._activate_pending_round_tip_modifiers()
         self.drink_scene_summary = None
         self.awaiting_level_clear_release = False
         self.drink_scene_slots = []
@@ -861,6 +869,7 @@ class Game:
             return
 
         self._clear_active_round_beer_theme()
+        self._clear_active_round_tip_modifiers()
         beer_score = self.served_count * BEER_SERVED_SCORE
         tips_score = self.tip_score
         lives_bonus = self.lives * LIVES_REMAINING_BONUS
@@ -906,6 +915,7 @@ class Game:
         center_x = surface.get_width() // 2
 
         self._draw_drink_scene_sign(surface, center_x, int(summary["level"]))
+        self._draw_drink_scene_cash(surface, center_x)
         self._draw_drink_scene_bar_back(surface, center_x)
         self._draw_drink_scene_bartender(surface, center_x)
         self._draw_drink_scene_bar_front(surface, center_x)
@@ -997,6 +1007,21 @@ class Game:
             DRINK_SCENE_SIGN_TEXT_COLOR,
         )
         surface.blit(title_surface, title_surface.get_rect(center=sign_rect.center))
+
+    def _draw_drink_scene_cash(self, surface: pygame.Surface, center_x: int) -> None:
+        sign_rect = pygame.Rect(0, 0, DRINK_SCENE_SIGN_WIDTH, DRINK_SCENE_SIGN_HEIGHT)
+        sign_rect.center = (center_x, DRINK_SCENE_SIGN_Y)
+        cash_surface = self.drink_scene_detail_font.render(
+            f"CASH {self._format_cash(self.cash)}",
+            True,
+            OVERLAY_TEXT_COLOR,
+        )
+        cash_rect = cash_surface.get_rect()
+        cash_rect.topright = (
+            sign_rect.right + DRINK_SCENE_CASH_X_OFFSET,
+            sign_rect.bottom + DRINK_SCENE_CASH_Y_OFFSET,
+        )
+        surface.blit(cash_surface, cash_rect)
 
     def _draw_drink_scene_bar_back(self, surface: pygame.Surface, center_x: int) -> None:
         return
@@ -1215,8 +1240,8 @@ class Game:
                 status = self._format_drink_scene_status(index, slot)
             else:
                 label = "CONTINUE"
-                bonus = "+1 LIFE"
-                cost = ""
+                bonus = ""
+                cost = "FREE BEER"
                 status = ""
 
             label_surface = self.drink_scene_detail_font.render(label, True, OVERLAY_TEXT_COLOR)
@@ -1360,33 +1385,40 @@ class Game:
 
     def _apply_upgrade_offer(self, offer: UpgradeOffer) -> None:
         upgrade_id = offer.definition.id
-        self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
 
         effect_type = offer.definition.effect_type
         bonus = offer.bonus
         if effect_type == GREEN_BEER_THEME_ID:
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.pending_next_round_beer_theme = GREEN_BEER_THEME_ID
         elif effect_type == WINE_BEER_THEME_ID:
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.pending_next_round_beer_theme = WINE_BEER_THEME_ID
         elif effect_type == HAT_COSMETIC_ID:
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.run_bartender_has_hat = True
         elif effect_type == BOWTIE_COSMETIC_ID:
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.run_bartender_has_bowtie = True
         elif effect_type == "quick_pour":
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.run_modifiers.quick_pour_fill_duration_delta += TAP_FILL_DURATION * bonus
         elif effect_type == "fast_serve":
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.run_modifiers.fast_serve_speed_bonus += FLYING_GLASS_SPEED * bonus
         elif effect_type == "quick_feet":
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.run_modifiers.quick_feet_speed_bonus += BARTENDER_WALK_SPEED * bonus
         elif effect_type == "long_reach":
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.run_modifiers.long_reach_padding_bonus += max(
                 1,
                 int(round(BARTENDER_CATCH_RECT_PADDING[0] * bonus)),
             )
         elif effect_type == "lucky_tips":
-            self.run_modifiers.lucky_tips_chance_bonus += bonus
+            self.pending_next_round_lucky_tips_chance_bonus += bonus
         elif effect_type == "bigger_tips":
-            self.run_modifiers.bigger_tips_cash_bonus += bonus
+            self.pending_next_round_bigger_tips_cash_bonus += bonus
 
     def _activate_pending_round_beer_theme(self) -> None:
         self.active_round_beer_theme = self.pending_next_round_beer_theme
@@ -1394,6 +1426,16 @@ class Game:
 
     def _clear_active_round_beer_theme(self) -> None:
         self.active_round_beer_theme = None
+
+    def _activate_pending_round_tip_modifiers(self) -> None:
+        self.active_round_lucky_tips_chance_bonus = self.pending_next_round_lucky_tips_chance_bonus
+        self.active_round_bigger_tips_cash_bonus = self.pending_next_round_bigger_tips_cash_bonus
+        self.pending_next_round_lucky_tips_chance_bonus = 0.0
+        self.pending_next_round_bigger_tips_cash_bonus = 0.0
+
+    def _clear_active_round_tip_modifiers(self) -> None:
+        self.active_round_lucky_tips_chance_bonus = 0.0
+        self.active_round_bigger_tips_cash_bonus = 0.0
 
     def _apply_round_cosmetic_state(self) -> None:
         self.round_bartender_has_hat = self.run_bartender_has_hat
@@ -1502,10 +1544,10 @@ class Game:
         return (horizontal, vertical)
 
     def _effective_tip_chance(self, patron: Patron) -> float:
-        return min(1.0, patron.tip_chance + self.run_modifiers.lucky_tips_chance_bonus)
+        return min(1.0, patron.tip_chance + self.active_round_lucky_tips_chance_bonus)
 
     def _effective_tip_cash_reward(self) -> float:
-        return TIP_CASH + self.run_modifiers.bigger_tips_cash_bonus
+        return TIP_CASH + self.active_round_bigger_tips_cash_bonus
 
     def _active_beer_fill_color(self) -> pygame.Color | None:
         if self.active_round_beer_theme == GREEN_BEER_THEME_ID:
