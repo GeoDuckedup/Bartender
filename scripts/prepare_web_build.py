@@ -73,10 +73,10 @@ PROGRESS_BLOCK = """        #progress {
 
 INFOBOX_BLOCK = """        #infobox {
             position: fixed; /* center relative to viewport */
-            background: rgba(154, 85, 30, 0.94);
+            background: rgba(154, 85, 30, 0.74);
             color: #ffe9bf;
             font-weight: bold;
-            padding: 16px 28px;
+            padding: 8px 18px 10px;
             border: 4px solid #d66b2c;
             border-radius: 14px;
             box-shadow: 0 0 0 6px rgba(30, 15, 9, 0.92);
@@ -84,32 +84,32 @@ INFOBOX_BLOCK = """        #infobox {
             text-transform: uppercase;
             letter-spacing: 0.12em;
             text-align: center;
-            min-width: 360px;
-            max-width: 460px;
-            bottom: 46px;
+            min-width: 280px;
+            max-width: 340px;
+            bottom: 96px;
         }
 
         .infobox-title {
-            font-size: 42px;
+            font-size: 22px;
             line-height: 1;
             letter-spacing: 0.08em;
             color: #ffe9bf;
             text-shadow: 0 3px 0 #7d2219;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
         }
 
         .infobox-subtitle {
-            font-size: 18px;
+            font-size: 12px;
             line-height: 1.2;
             color: #f6ddb0;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
         }
 
         .infobox-note {
-            font-size: 11px;
-            line-height: 1.4;
+            font-size: 8px;
+            line-height: 1.2;
             color: #f0c47a;
-            letter-spacing: 0.1em;
+            letter-spacing: 0.06em;
         }
 """
 
