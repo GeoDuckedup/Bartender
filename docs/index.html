@@ -389,6 +389,44 @@ frameborder="1"
         box.hidden =  debug_hidden
 
         show_infobox()
+
+        const focusCanvas = () => {
+            canvas.focus()
+        }
+
+        ;["click", "mousedown", "touchstart"].forEach((eventName) => {
+            canvas.addEventListener(eventName, focusCanvas, { passive: true })
+            document.addEventListener(eventName, focusCanvas, { passive: true })
+        })
+
+        window.addEventListener(
+            "keydown",
+            (event) => {
+                const blockedKeys = new Set([
+                    "ArrowUp",
+                    "ArrowDown",
+                    "ArrowLeft",
+                    "ArrowRight",
+                    " ",
+                    "Spacebar",
+                    "w",
+                    "W",
+                    "a",
+                    "A",
+                    "s",
+                    "S",
+                    "d",
+                    "D",
+                    "f",
+                    "F",
+                ])
+                if (blockedKeys.has(event.key)) {
+                    event.preventDefault()
+                    focusCanvas()
+                }
+            },
+            { capture: true }
+        )
     }
 
     function custom_prerun(){
