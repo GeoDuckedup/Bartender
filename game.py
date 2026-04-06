@@ -496,8 +496,6 @@ class Game:
             return
 
         if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
-            if self.awaiting_level_clear_release:
-                return
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     if self._is_drink_scene_drinking():
@@ -551,8 +549,6 @@ class Game:
             return
 
         if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
-            if self.awaiting_level_clear_release and not self._any_key_pressed():
-                self.awaiting_level_clear_release = False
             self._update_drink_scene_drink(dt)
             return
 
@@ -881,7 +877,7 @@ class Game:
         lives_bonus = self.lives * LIVES_REMAINING_BONUS
         self.score += lives_bonus
         self.flow_state = FlowState.LEVEL_CLEAR_DRINK_SCENE
-        self.awaiting_level_clear_release = True
+        self.awaiting_level_clear_release = False
         self.drink_scene_slots = self._build_drink_scene_slots()
         self.drink_scene_selected_index = 0
         self.drink_scene_purchased_indices = set()
