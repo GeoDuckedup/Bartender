@@ -296,6 +296,19 @@ def patch_index_html(html: str) -> str:
     )
     html = replace_once(
         html,
+        """            right: 0;
+        }
+""",
+        """            right: 0;
+        }
+
+        canvas.emscripten:focus {
+            outline: none;
+        }
+""",
+    )
+    html = replace_once(
+        html,
         """        body {
             font-family: arial;
             margin: 0;
