@@ -38,16 +38,8 @@ BAR_WIDTH = BAR_RIGHT - BAR_LEFT
 GRAIN_LINE_COUNT = 5
 BAR_SPACING = (PLAYFIELD_HEIGHT - (BAR_COUNT * BAR_HEIGHT)) // (BAR_COUNT + 1)
 BAR_GRAIN_INSET_X = 10
-BAR_KNOT_MIN_X = 24
-BAR_KNOT_RIGHT_PADDING = 40
-BAR_KNOT_MIN_WIDTH = 10
-BAR_KNOT_MAX_WIDTH = 18
-BAR_KNOT_MIN_HEIGHT = 4
-BAR_KNOT_MAX_HEIGHT = 8
 BAR_KNOT_MARGIN_Y = 10
 BAR_FRONT_GRAIN_OFFSETS = (4, 8, 12)
-BAR_FRONT_KNOT_TOP_PADDING = 4
-BAR_FRONT_KNOT_BOTTOM_PADDING = 8
 
 # Palette:
 # Keep scene colors centralized so stage look can be tuned quickly.
@@ -59,9 +51,14 @@ BAR_DECK_COLOR = pygame.Color("#D88A3B")
 BAR_FRONT_COLOR = pygame.Color("#BF6D28")
 BAR_RAIL_COLOR = pygame.Color("#6B3A1F")
 BAR_GRAIN_COLOR = pygame.Color("#B5611F")
-BAR_KNOT_COLOR = pygame.Color("#8B4513")
 RIGHT_WALL_COLOR = pygame.Color("#2B3D6B")
-TAP_COLOR = pygame.Color("#C87941")
+KEG_BODY_COLOR = pygame.Color("#A9682C")
+KEG_FACE_COLOR = pygame.Color("#C27A34")
+KEG_BAND_COLOR = pygame.Color("#6B3A1F")
+KEG_SHADOW_COLOR = pygame.Color("#5A2E14")
+TAP_HOUSING_COLOR = pygame.Color("#A9682C")
+TAP_HOUSING_INSET_COLOR = pygame.Color("#6B3A1F")
+TAP_SPOUT_COLOR = pygame.Color("#C87941")
 TAP_HANDLE_COLOR = pygame.Color("#A0522D")
 BARTENDER_BODY_COLOR = pygame.Color("#F5F0E8")
 BARTENDER_APRON_COLOR = pygame.Color("#8B6914")
@@ -85,23 +82,35 @@ BARTENDER_WALK_MIN_X = BAR_LEFT
 BARTENDER_WALK_MAX_X = TAP_HOME_X
 TAP_GLASS_X = BAR_RIGHT - 14
 
-# Tap geometry:
-# Tap parts stay adjustable here for future stage art swaps.
-TAP_STEM_WIDTH = 8
-TAP_STEM_HEIGHT = 32
-TAP_STEM_RIGHT_MARGIN = 16
-TAP_SPOUT_HEIGHT = 8
-TAP_SPOUT_Y_OFFSET = 4
-TAP_HANDLE_WIDTH = 12
-TAP_HANDLE_HEIGHT = 6
-TAP_HANDLE_LEFT_OFFSET = 8
-TAP_HANDLE_Y_OFFSET = -12
+# Keg / tap geometry:
+# These shapes stay visual-only and should continue to align with the
+# service strip on the right side of the playfield.
+KEG_WIDTH = 26
+KEG_HEIGHT = 42
+KEG_RIGHT_MARGIN = 8
+KEG_ASSEMBLY_Y_OFFSET = -6
+KEG_FACE_INSET = 3
+KEG_BAND_HEIGHT = 4
+KEG_BAND_INSET = 1
+KEG_FOOT_WIDTH = 6
+KEG_FOOT_HEIGHT = 4
+KEG_FOOT_INSET = 4
+TAP_HOUSING_WIDTH = 12
+TAP_HOUSING_HEIGHT = 34
+TAP_HOUSING_OFFSET_X = 4
+TAP_HOUSING_INSET = 3
+TAP_SPOUT_LENGTH = 18
+TAP_SPOUT_HEIGHT = 6
+TAP_SPOUT_Y_OFFSET = 5
+TAP_HANDLE_WIDTH = 10
+TAP_HANDLE_HEIGHT = 5
+TAP_HANDLE_OFFSET_X = 6
+TAP_HANDLE_Y_OFFSET = -5
 
 
 @dataclass(frozen=True)
 class BarDecoration:
     grain_offsets: tuple[int, ...]
-    knot_rects: tuple[pygame.Rect, ...]
 
 
 def _build_bar_decorations() -> tuple[BarDecoration, ...]:
@@ -112,18 +121,9 @@ def _build_bar_decorations() -> tuple[BarDecoration, ...]:
             rng.randint(BAR_KNOT_MARGIN_Y, BAR_HEIGHT - BAR_KNOT_MARGIN_Y)
             for _ in range(GRAIN_LINE_COUNT)
         )
-        knot_count = rng.randint(2, 3)
-        knot_rects = []
-        for _ in range(knot_count):
-            knot_width = rng.randint(BAR_KNOT_MIN_WIDTH, BAR_KNOT_MAX_WIDTH)
-            knot_height = rng.randint(BAR_KNOT_MIN_HEIGHT, BAR_KNOT_MAX_HEIGHT)
-            x = rng.randint(BAR_KNOT_MIN_X, BAR_WIDTH - BAR_KNOT_RIGHT_PADDING)
-            y = rng.randint(BAR_KNOT_MARGIN_Y, BAR_HEIGHT - knot_height - BAR_KNOT_MARGIN_Y)
-            knot_rects.append(pygame.Rect(x, y, knot_width, knot_height))
         decorations.append(
             BarDecoration(
                 grain_offsets=grain_offsets,
-                knot_rects=tuple(knot_rects),
             )
         )
     return tuple(decorations)
@@ -212,7 +212,7 @@ class SceneRenderer:
         )
 
         for offset in BAR_FRONT_GRAIN_OFFSETS:
-            y = min(front_rect.bottom - BAR_KNOT_MIN_HEIGHT, front_rect.top + offset)
+            y = min(front_rect.bottom - 2, front_rect.top + offset)
             pygame.draw.line(
                 surface,
                 BAR_GRAIN_COLOR,
@@ -221,51 +221,104 @@ class SceneRenderer:
                 1,
             )
 
-        for knot_rect in decoration.knot_rects:
-            knot_y = front_rect.top + BAR_FRONT_KNOT_TOP_PADDING + (
-                knot_rect.y % max(1, front_rect.height - knot_rect.height - BAR_FRONT_KNOT_BOTTOM_PADDING)
-            )
-            shifted_rect = pygame.Rect(
-                knot_rect.left + rect.left,
-                knot_y,
-                knot_rect.width,
-                knot_rect.height,
-            )
-            pygame.draw.ellipse(surface, BAR_KNOT_COLOR, shifted_rect)
-
     def draw_right_wall(self, surface: pygame.Surface) -> None:
-        wall_rect = pygame.Rect(
-            RIGHT_WALL_LEFT,
-            PLAYFIELD_TOP,
-            RIGHT_WALL_WIDTH,
-            PLAYFIELD_HEIGHT,
-        )
-        pygame.draw.rect(surface, RIGHT_WALL_COLOR, wall_rect)
+        return
 
     def draw_taps(self, surface: pygame.Surface) -> None:
         for center_y in LANE_CENTERS:
             self.draw_tap(surface, center_y)
 
     def draw_tap(self, surface: pygame.Surface, center_y: int) -> None:
-        stem_left = RIGHT_WALL_LEFT + RIGHT_WALL_WIDTH - TAP_STEM_RIGHT_MARGIN
-        stem = pygame.Rect(
-            stem_left,
-            center_y - (TAP_STEM_HEIGHT // 2),
-            TAP_STEM_WIDTH,
-            TAP_STEM_HEIGHT,
+        assembly_center_y = center_y + KEG_ASSEMBLY_Y_OFFSET
+        keg_rect = pygame.Rect(
+            LOGICAL_WIDTH - KEG_RIGHT_MARGIN - KEG_WIDTH,
+            assembly_center_y - (KEG_HEIGHT // 2),
+            KEG_WIDTH,
+            KEG_HEIGHT,
         )
-        spout = pygame.Rect(
-            RIGHT_WALL_LEFT,
-            center_y + TAP_SPOUT_Y_OFFSET,
-            stem_left + TAP_STEM_WIDTH - RIGHT_WALL_LEFT,
+        keg_shadow_rect = keg_rect.move(2, 1)
+        keg_face_rect = keg_rect.inflate(-(KEG_FACE_INSET * 2), -(KEG_FACE_INSET * 2))
+        top_band_rect = pygame.Rect(
+            keg_rect.left + KEG_BAND_INSET,
+            keg_rect.top + 4,
+            keg_rect.width - (KEG_BAND_INSET * 2),
+            KEG_BAND_HEIGHT,
+        )
+        bottom_band_rect = pygame.Rect(
+            keg_rect.left + KEG_BAND_INSET,
+            keg_rect.bottom - 4 - KEG_BAND_HEIGHT,
+            keg_rect.width - (KEG_BAND_INSET * 2),
+            KEG_BAND_HEIGHT,
+        )
+        center_band_rect = pygame.Rect(
+            keg_rect.left + KEG_BAND_INSET,
+            keg_rect.centery - (KEG_BAND_HEIGHT // 2),
+            keg_rect.width - (KEG_BAND_INSET * 2),
+            KEG_BAND_HEIGHT,
+        )
+        left_foot_rect = pygame.Rect(
+            keg_rect.left + KEG_FOOT_INSET,
+            keg_rect.bottom - 1,
+            KEG_FOOT_WIDTH,
+            KEG_FOOT_HEIGHT,
+        )
+        right_foot_rect = pygame.Rect(
+            keg_rect.right - KEG_FOOT_INSET - KEG_FOOT_WIDTH,
+            keg_rect.bottom - 1,
+            KEG_FOOT_WIDTH,
+            KEG_FOOT_HEIGHT,
+        )
+        tap_housing_rect = pygame.Rect(
+            keg_rect.left - TAP_HOUSING_WIDTH,
+            assembly_center_y - (TAP_HOUSING_HEIGHT // 2),
+            TAP_HOUSING_WIDTH,
+            TAP_HOUSING_HEIGHT,
+        )
+        inset_width = tap_housing_rect.width - (TAP_HOUSING_INSET * 2)
+        inset_height = tap_housing_rect.height - (TAP_HOUSING_INSET * 2)
+        tap_inset_rect = pygame.Rect(
+            tap_housing_rect.right - TAP_HOUSING_INSET - inset_width,
+            tap_housing_rect.top + TAP_HOUSING_INSET,
+            inset_width,
+            inset_height,
+        )
+        mirrored_spout_length = max(0, keg_rect.left - tap_housing_rect.right)
+        spout_rect = pygame.Rect(
+            tap_housing_rect.right,
+            assembly_center_y + TAP_SPOUT_Y_OFFSET,
+            mirrored_spout_length,
             TAP_SPOUT_HEIGHT,
         )
-        handle = pygame.Rect(
-            stem_left - TAP_HANDLE_LEFT_OFFSET,
-            center_y + TAP_HANDLE_Y_OFFSET,
+        handle_rect = pygame.Rect(
+            tap_housing_rect.left - 2,
+            tap_housing_rect.top + TAP_HANDLE_Y_OFFSET,
             TAP_HANDLE_WIDTH,
             TAP_HANDLE_HEIGHT,
         )
-        pygame.draw.rect(surface, TAP_COLOR, stem)
-        pygame.draw.rect(surface, TAP_COLOR, spout)
-        pygame.draw.rect(surface, TAP_HANDLE_COLOR, handle)
+
+        pygame.draw.rect(surface, KEG_SHADOW_COLOR, keg_shadow_rect, border_radius=6)
+        pygame.draw.rect(surface, KEG_BODY_COLOR, keg_rect, border_radius=6)
+        pygame.draw.rect(surface, KEG_FACE_COLOR, keg_face_rect, border_radius=4)
+        pygame.draw.rect(surface, KEG_BAND_COLOR, top_band_rect, border_radius=2)
+        pygame.draw.rect(surface, KEG_BAND_COLOR, center_band_rect, border_radius=2)
+        pygame.draw.rect(surface, KEG_BAND_COLOR, bottom_band_rect, border_radius=2)
+        pygame.draw.rect(surface, KEG_SHADOW_COLOR, left_foot_rect)
+        pygame.draw.rect(surface, KEG_SHADOW_COLOR, right_foot_rect)
+        stave_x_positions = (
+            keg_face_rect.left + 5,
+            keg_face_rect.centerx,
+            keg_face_rect.right - 5,
+        )
+        for stave_x in stave_x_positions:
+            pygame.draw.line(
+                surface,
+                KEG_SHADOW_COLOR,
+                (stave_x, keg_face_rect.top + 2),
+                (stave_x, keg_face_rect.bottom - 2),
+                1,
+            )
+
+        pygame.draw.rect(surface, TAP_HOUSING_COLOR, tap_housing_rect)
+        pygame.draw.rect(surface, TAP_HOUSING_INSET_COLOR, tap_inset_rect)
+        pygame.draw.rect(surface, TAP_SPOUT_COLOR, spout_rect)
+        pygame.draw.rect(surface, TAP_HANDLE_COLOR, handle_rect)

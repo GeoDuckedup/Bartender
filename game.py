@@ -650,18 +650,9 @@ class Game:
                 if not patron.can_receive_beer:
                     patron.update(dt)
 
-            walking_patrons = sorted(
-                (patron for patron in lane_patrons if patron.can_receive_beer),
-                key=lambda patron: patron.x,
-                reverse=True,
-            )
-            leader: Patron | None = None
-            for patron in walking_patrons:
-                max_walk_x = None
-                if leader is not None:
-                    max_walk_x = leader.x - Patron.BODY_WIDTH - Patron.QUEUE_GAP
-                patron.update(dt, max_walk_x=max_walk_x)
-                leader = patron
+            for patron in lane_patrons:
+                if patron.can_receive_beer:
+                    patron.update(dt)
 
     def _frontmost_receivable_patron(self, bar_index: int) -> Patron | None:
         receivable_patrons = [
@@ -1218,7 +1209,7 @@ class Game:
                 pygame.draw.rect(surface, highlight_color, highlight_rect, 2, border_radius=6)
 
             if slot.kind == "upgrade" and slot.offer is not None:
-                label = slot.offer.definition.name.upper()
+                label = self._format_drink_scene_offer_label(slot.offer)
                 bonus = ""
                 cost = "" if is_purchased else self._format_offer_cash(slot.offer.cost)
                 status = self._format_drink_scene_status(index, slot)
@@ -1244,6 +1235,11 @@ class Game:
                 status_color = DRINK_SCENE_PURCHASED_GLOW_COLOR if status == DRINK_SCENE_PURCHASED_LABEL else DRINK_SCENE_UNAFFORDABLE_COLOR
                 status_surface = self.detail_font.render(status, True, status_color)
                 surface.blit(status_surface, status_surface.get_rect(center=(mug_center_x, DRINK_SCENE_STATUS_Y)))
+
+    def _format_drink_scene_offer_label(self, offer: UpgradeOffer) -> str:
+        if offer.definition.id == GREEN_BEER_THEME_ID:
+            return "GREEN BEER"
+        return offer.definition.name.upper()
 
     def _finish_fail_feedback(self) -> None:
         if self.pending_game_over:
