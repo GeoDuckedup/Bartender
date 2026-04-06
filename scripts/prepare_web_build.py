@@ -157,6 +157,9 @@ FOCUS_JS = """        const focusCanvas = () => {
                 if (blockedKeys.has(event.key)) {
                     event.preventDefault()
                     focusCanvas()
+                    if ((event.key === " " || event.key === "Spacebar") && window.MM && !window.MM.UME) {
+                        window.MM.UME = true
+                    }
                 }
             },
             { capture: true }
