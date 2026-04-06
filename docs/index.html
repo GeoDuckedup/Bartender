@@ -72,8 +72,7 @@ async def custom_site():
         # now make a prompt
         msg  = """
 <div class="infobox-title">BARTENDER</div>
-<div class="infobox-subtitle">CLICK TO START</div>
-<div class="infobox-note">ARROWS OR WASD TO MOVE • SPACE TO POUR</div>
+<div class="infobox-subtitle">SPACEBAR TO START</div>
 """
         platform.window.infobox.innerHTML = msg
         print("\n"*4, f"    * Waiting for media user engagement. {msg} *" , "\n"*4)
@@ -178,9 +177,12 @@ function show_infobox() {
     const w = infobox.offsetWidth;
     const h = infobox.offsetHeight;
 
-    // Center in viewport
+    // Center horizontally and anchor lower over the poster without stretching.
     const left = (window.innerWidth - w) / 2;
-    const top = (window.innerHeight - h) / 2;
+    const top = Math.min(
+        window.innerHeight - h - 32,
+        Math.max(24, (window.innerHeight * 0.62) - (h / 2))
+    );
 
     infobox.style.left = left + "px";
     infobox.style.top = top + "px";
@@ -267,7 +269,7 @@ function show_infobox() {
             text-align: center;
             min-width: 280px;
             max-width: 340px;
-            bottom: 96px;
+            height: auto;
         }
 
         .infobox-title {
@@ -283,14 +285,7 @@ function show_infobox() {
             font-size: 12px;
             line-height: 1.2;
             color: #f6ddb0;
-            margin-bottom: 4px;
-        }
-
-        .infobox-note {
-            font-size: 8px;
-            line-height: 1.2;
-            color: #f0c47a;
-            letter-spacing: 0.06em;
+            margin-bottom: 0;
         }
         div.emscripten { text-align: center; }
         div.emscripten_border { border: 1px solid black; }

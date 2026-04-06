@@ -10,8 +10,7 @@ TARGET_DIRS = (REPO_ROOT / "docs", REPO_ROOT / "web")
 BOX_ART_SOURCE = REPO_ROOT / "web_assets" / "box-art.png"
 
 PROMPT_HTML = """<div class="infobox-title">BARTENDER</div>
-<div class="infobox-subtitle">CLICK TO START</div>
-<div class="infobox-note">ARROWS OR WASD TO MOVE • SPACE TO POUR</div>"""
+<div class="infobox-subtitle">SPACEBAR TO START</div>"""
 
 LOADING_HTML = """<div class="infobox-title">BARTENDER</div>
 <div class="infobox-subtitle">LOADING</div>
@@ -86,7 +85,7 @@ INFOBOX_BLOCK = """        #infobox {
             text-align: center;
             min-width: 280px;
             max-width: 340px;
-            bottom: 96px;
+            height: auto;
         }
 
         .infobox-title {
@@ -102,14 +101,7 @@ INFOBOX_BLOCK = """        #infobox {
             font-size: 12px;
             line-height: 1.2;
             color: #f6ddb0;
-            margin-bottom: 4px;
-        }
-
-        .infobox-note {
-            font-size: 8px;
-            line-height: 1.2;
-            color: #f0c47a;
-            letter-spacing: 0.06em;
+            margin-bottom: 0;
         }
 """
 
@@ -188,6 +180,42 @@ def replace_once(text: str, old: str, new: str) -> str:
 
 
 def patch_index_html(html: str) -> str:
+    html = replace_once(
+        html,
+        """function show_infobox() {
+    infobox.style.display = "block";
+
+    // Measure box
+    const w = infobox.offsetWidth;
+    const h = infobox.offsetHeight;
+
+    // Center in viewport
+    const left = (window.innerWidth - w) / 2;
+    const top = (window.innerHeight - h) / 2;
+
+    infobox.style.left = left + "px";
+    infobox.style.top = top + "px";
+}
+""",
+        """function show_infobox() {
+    infobox.style.display = "block";
+
+    // Measure box
+    const w = infobox.offsetWidth;
+    const h = infobox.offsetHeight;
+
+    // Center horizontally and anchor lower over the poster without stretching.
+    const left = (window.innerWidth - w) / 2;
+    const top = Math.min(
+        window.innerHeight - h - 32,
+        Math.max(24, (window.innerHeight * 0.62) - (h / 2))
+    );
+
+    infobox.style.left = left + "px";
+    infobox.style.top = top + "px";
+}
+""",
+    )
     html = replace_once(
         html,
         '    platform.document.body.style.background = "#7f7f7f"\n',
