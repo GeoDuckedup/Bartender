@@ -506,9 +506,9 @@ class Game:
                         self._start_drink_scene_drink()
                 elif self._is_drink_scene_drinking():
                     return
-                elif event.key == pygame.K_LEFT:
+                elif event.key in (pygame.K_LEFT, pygame.K_a):
                     self._move_drink_scene_selection(-1)
-                elif event.key == pygame.K_RIGHT:
+                elif event.key in (pygame.K_RIGHT, pygame.K_d):
                     self._move_drink_scene_selection(1)
             elif event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
                 self._pause_drink_scene_drink()
