@@ -221,6 +221,8 @@ GREEN_BEER_THEME_ID = "green_night"
 WINE_BEER_THEME_ID = "wine_night"
 HAT_COSMETIC_ID = "hat"
 BOWTIE_COSMETIC_ID = "bowtie"
+GLASSES_COSMETIC_ID = "glasses"
+CIGAR_COSMETIC_ID = "cigar"
 
 # Temporary testing override:
 # A fresh run starts with these cosmetics for the opening round only.
@@ -456,6 +458,36 @@ BOWTIE_UPGRADE = UpgradeDefinition(
     is_cosmetic=True,
 )
 
+GLASSES_UPGRADE = UpgradeDefinition(
+    id="glasses",
+    name="Glasses",
+    description="Bartender wears glasses for the rest of the run.",
+    effect_type="glasses",
+    base_cost=4,
+    cost_per_level=1,
+    base_bonus=0.0,
+    bonus_per_level=0.0,
+    min_level=1,
+    max_stacks=1,
+    weight=1,
+    is_cosmetic=True,
+)
+
+CIGAR_UPGRADE = UpgradeDefinition(
+    id="cigar",
+    name="Cigar",
+    description="Bartender smokes a cigar for the rest of the run.",
+    effect_type="cigar",
+    base_cost=5,
+    cost_per_level=1,
+    base_bonus=0.0,
+    bonus_per_level=0.0,
+    min_level=1,
+    max_stacks=1,
+    weight=1,
+    is_cosmetic=True,
+)
+
 GAMEPLAY_UPGRADE_DEFINITIONS = (
     QUICK_POUR_UPGRADE,
     FAST_SERVE_UPGRADE,
@@ -471,6 +503,8 @@ COSMETIC_UPGRADE_DEFINITIONS = (
     WINE_NIGHT_UPGRADE,
     HAT_UPGRADE,
     BOWTIE_UPGRADE,
+    GLASSES_UPGRADE,
+    CIGAR_UPGRADE,
 )
 
 ALL_UPGRADE_DEFINITIONS = GAMEPLAY_UPGRADE_DEFINITIONS + COSMETIC_UPGRADE_DEFINITIONS
@@ -866,6 +900,8 @@ class Game:
         self.run_modifiers = RunModifiers()
         self.run_bartender_has_hat = False
         self.run_bartender_has_bowtie = False
+        self.run_bartender_has_glasses = False
+        self.run_bartender_has_cigar = False
         self.pending_next_round_beer_theme: str | None = None
         self.active_round_beer_theme: str | None = None
         self.pending_next_round_lucky_tips_chance_bonus = 0.0
@@ -874,6 +910,8 @@ class Game:
         self.active_round_bigger_tips_cash_bonus = 0.0
         self.round_bartender_has_hat = False
         self.round_bartender_has_bowtie = False
+        self.round_bartender_has_glasses = False
+        self.round_bartender_has_cigar = False
         self.first_round_cosmetic_test_pending = ENABLE_FIRST_ROUND_COSMETIC_TEST
         self.upgrade_stacks = {upgrade.id: 0 for upgrade in UPGRADE_DEFINITIONS}
         self.upgrade_definitions = UPGRADE_DEFINITIONS
@@ -1479,6 +1517,12 @@ class Game:
         elif effect_type == BOWTIE_COSMETIC_ID:
             self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.run_bartender_has_bowtie = True
+        elif effect_type == GLASSES_COSMETIC_ID:
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
+            self.run_bartender_has_glasses = True
+        elif effect_type == CIGAR_COSMETIC_ID:
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
+            self.run_bartender_has_cigar = True
         elif effect_type == "quick_pour":
             self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
             self.run_modifiers.quick_pour_fill_duration_delta += TAP_FILL_DURATION * bonus
@@ -1522,6 +1566,8 @@ class Game:
     def _apply_round_cosmetic_state(self) -> None:
         self.round_bartender_has_hat = self.run_bartender_has_hat
         self.round_bartender_has_bowtie = self.run_bartender_has_bowtie
+        self.round_bartender_has_glasses = self.run_bartender_has_glasses
+        self.round_bartender_has_cigar = self.run_bartender_has_cigar
         if self.first_round_cosmetic_test_pending:
             self.round_bartender_has_hat = True
             self.round_bartender_has_bowtie = True
@@ -1632,6 +1678,8 @@ class Game:
         self.bartender.catch_rect_padding = self._effective_catch_rect_padding()
         self.bartender.has_hat = self.round_bartender_has_hat
         self.bartender.has_bowtie = self.round_bartender_has_bowtie
+        self.bartender.has_glasses = self.round_bartender_has_glasses
+        self.bartender.has_cigar = self.round_bartender_has_cigar
 
     def _effective_bartender_walk_speed(self) -> float:
         return BARTENDER_WALK_SPEED + self.run_modifiers.quick_feet_speed_bonus
