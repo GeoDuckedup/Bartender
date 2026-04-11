@@ -48,7 +48,8 @@ BEER_SERVED_SCORE = 10
 TIP_SCORE = 25
 BEER_SERVED_CASH = 0.5
 TIP_CASH = 1.0
-LIVES_REMAINING_BONUS = 100
+TIP_SPAWN_RATE_MULTIPLIER = 1.2
+LIVES_REMAINING_BONUS = 50
 
 # Spawn / patron variety tuning:
 # The first spawn delay makes rounds feel responsive without affecting
@@ -197,6 +198,16 @@ LATE_COSMETIC_OFFER_WEIGHT_MULTIPLIER = 0.75
 AFFORDABLE_OFFER_WEIGHT_MULTIPLIER = 1.2
 NEAR_AFFORDABLE_COST_MARGIN = 2
 NEAR_AFFORDABLE_OFFER_WEIGHT_MULTIPLIER = 1.05
+LOW_LIFE_LAST_CALL_WEIGHT_MULTIPLIER = 3.0
+MID_LIFE_LAST_CALL_WEIGHT_MULTIPLIER = 1.5
+NO_GAMEPLAY_UPGRADES_WEIGHT_MULTIPLIER = 1.4
+NO_COSMETICS_WEIGHT_MULTIPLIER = 1.3
+HIGH_CASH_THRESHOLD = 10.0
+HIGH_CASH_EXPENSIVE_COST_MIN = 6.0
+HIGH_CASH_EXPENSIVE_WEIGHT_MULTIPLIER = 1.4
+LOW_CASH_THRESHOLD = 3.0
+LOW_CASH_CHEAP_COST_MAX = 3.0
+LOW_CASH_CHEAP_WEIGHT_MULTIPLIER = 1.5
 
 FAIL_OVERLAY_ALPHA = 80
 GAME_OVER_OVERLAY_ALPHA = 170
@@ -289,7 +300,7 @@ class RunModifiers:
 
 QUICK_POUR_UPGRADE = UpgradeDefinition(
     id="quick_pour",
-    name="Quiker Pour",
+    name="Quicker Pour",
     description="Fill beers faster.",
     effect_type="quick_pour",
     base_cost=3.0,
@@ -371,6 +382,20 @@ BIGGER_TIPS_UPGRADE = UpgradeDefinition(
     weight=2,
 )
 
+LAST_CALL_UPGRADE = UpgradeDefinition(
+    id="last_call",
+    name="Last Call",
+    description="Gain an extra life.",
+    effect_type="last_call",
+    base_cost=5.0,
+    cost_per_level=1.0,
+    base_bonus=0.0,
+    bonus_per_level=0.0,
+    min_level=1,
+    max_stacks=2,
+    weight=3,
+)
+
 GREEN_NIGHT_UPGRADE = UpgradeDefinition(
     id="green_night",
     name="Green Night",
@@ -438,6 +463,7 @@ GAMEPLAY_UPGRADE_DEFINITIONS = (
     LONG_REACH_UPGRADE,
     LUCKY_TIPS_UPGRADE,
     BIGGER_TIPS_UPGRADE,
+    LAST_CALL_UPGRADE,
 )
 
 COSMETIC_UPGRADE_DEFINITIONS = (
@@ -867,7 +893,6 @@ class Game:
         self._reset_round()
 
     def _advance_to_next_round(self) -> None:
-        self.lives = min(MAX_LIVES, self.lives + 1)
         self.current_level += 1
         self.level_config = build_level_config(self.current_level)
         self._activate_pending_round_beer_theme()
@@ -1469,6 +1494,9 @@ class Game:
                 1,
                 int(round(BARTENDER_CATCH_RECT_PADDING[0] * bonus)),
             )
+        elif effect_type == "last_call":
+            self.upgrade_stacks[upgrade_id] = self.upgrade_stacks.get(upgrade_id, 0) + 1
+            self.lives += 1
         elif effect_type == "lucky_tips":
             self.pending_next_round_lucky_tips_chance_bonus += bonus
         elif effect_type == "bigger_tips":
@@ -1531,6 +1559,7 @@ class Game:
     def _shop_offer_weight(self, offer: UpgradeOffer) -> float:
         weight = float(offer.definition.weight)
         weight *= self._shop_cost_band_weight_multiplier(offer.cost)
+        weight *= self._contextual_weight_multiplier(offer)
         if offer.definition.is_cosmetic:
             weight *= self._shop_cosmetic_weight_multiplier()
 
@@ -1540,6 +1569,33 @@ class Game:
             weight *= NEAR_AFFORDABLE_OFFER_WEIGHT_MULTIPLIER
 
         return max(0.01, weight)
+
+    def _contextual_weight_multiplier(self, offer: UpgradeOffer) -> float:
+        multiplier = 1.0
+        upgrade = offer.definition
+
+        if upgrade.id == LAST_CALL_UPGRADE.id:
+            if self.lives == 1:
+                multiplier *= LOW_LIFE_LAST_CALL_WEIGHT_MULTIPLIER
+            elif self.lives == 2:
+                multiplier *= MID_LIFE_LAST_CALL_WEIGHT_MULTIPLIER
+
+        if not upgrade.is_cosmetic and self._total_owned_upgrades(GAMEPLAY_UPGRADE_DEFINITIONS) == 0:
+            multiplier *= NO_GAMEPLAY_UPGRADES_WEIGHT_MULTIPLIER
+
+        if upgrade.is_cosmetic and self._total_owned_upgrades(COSMETIC_UPGRADE_DEFINITIONS) == 0:
+            multiplier *= NO_COSMETICS_WEIGHT_MULTIPLIER
+
+        if self.cash > HIGH_CASH_THRESHOLD and offer.cost >= HIGH_CASH_EXPENSIVE_COST_MIN:
+            multiplier *= HIGH_CASH_EXPENSIVE_WEIGHT_MULTIPLIER
+
+        if self.cash < LOW_CASH_THRESHOLD and offer.cost <= LOW_CASH_CHEAP_COST_MAX:
+            multiplier *= LOW_CASH_CHEAP_WEIGHT_MULTIPLIER
+
+        return multiplier
+
+    def _total_owned_upgrades(self, definitions: tuple[UpgradeDefinition, ...]) -> int:
+        return sum(self.upgrade_stacks.get(upgrade.id, 0) for upgrade in definitions)
 
     def _shop_cosmetic_weight_multiplier(self) -> float:
         if self.current_level <= EARLY_SHOP_LEVEL_MAX:
@@ -1598,7 +1654,7 @@ class Game:
         return (horizontal, vertical)
 
     def _effective_tip_chance(self, patron: Patron) -> float:
-        return min(1.0, patron.tip_chance + self.active_round_lucky_tips_chance_bonus)
+        return min(1.0, (patron.tip_chance * TIP_SPAWN_RATE_MULTIPLIER) + self.active_round_lucky_tips_chance_bonus)
 
     def _effective_tip_cash_reward(self) -> float:
         return TIP_CASH + self.active_round_bigger_tips_cash_bonus
