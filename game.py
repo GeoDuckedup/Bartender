@@ -175,6 +175,17 @@ DRINK_SCENE_BARTENDER_BOWTIE_HEIGHT = 10
 DRINK_SCENE_BARTENDER_BOWTIE_CENTER = 6
 DRINK_SCENE_BARTENDER_BOWTIE_Y = 14
 DRINK_SCENE_BARTENDER_BOWTIE_COLOR = pygame.Color("#A3242B")
+DRINK_SCENE_BARTENDER_GLASSES_WIDTH = 28
+DRINK_SCENE_BARTENDER_GLASSES_HEIGHT = 8
+DRINK_SCENE_BARTENDER_GLASSES_Y_OFFSET = 14
+DRINK_SCENE_BARTENDER_GLASSES_BRIDGE = 4
+DRINK_SCENE_BARTENDER_GLASSES_COLOR = pygame.Color("#3E2A1A")
+DRINK_SCENE_BARTENDER_CIGAR_WIDTH = 14
+DRINK_SCENE_BARTENDER_CIGAR_HEIGHT = 4
+DRINK_SCENE_BARTENDER_CIGAR_Y_OFFSET = 24
+DRINK_SCENE_BARTENDER_CIGAR_X_OFFSET = 10
+DRINK_SCENE_BARTENDER_CIGAR_COLOR = pygame.Color("#6B4226")
+DRINK_SCENE_BARTENDER_CIGAR_EMBER_COLOR = pygame.Color("#E85A1B")
 
 # Shop offer tuning:
 # Early shops should skew toward cheaper upgrades, while later shops
@@ -226,7 +237,7 @@ CIGAR_COSMETIC_ID = "cigar"
 
 # Temporary testing override:
 # A fresh run starts with these cosmetics for the opening round only.
-ENABLE_FIRST_ROUND_COSMETIC_TEST = False
+ENABLE_FIRST_ROUND_COSMETIC_TEST = True
 
 
 class FlowState(Enum):
@@ -1231,18 +1242,22 @@ class Game:
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SHIRT_COLOR, left_leg_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SHIRT_COLOR, right_leg_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_APRON_COLOR, apron_rect)
+        if self.round_bartender_has_bowtie or self.run_bartender_has_bowtie:
+            self._draw_drink_scene_bartender_bowtie(surface, body_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SKIN_COLOR, head_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SKIN_COLOR, left_hand_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SKIN_COLOR, right_hand_rect)
+        if self.round_bartender_has_glasses or self.run_bartender_has_glasses:
+            self._draw_drink_scene_bartender_glasses(surface, head_rect)
+        if self.round_bartender_has_cigar or self.run_bartender_has_cigar:
+            self._draw_drink_scene_bartender_cigar(surface, head_rect)
 
         if self.drink_scene_active_index is not None:
             active_mug_rect, _ = self._drink_scene_slot_geometry(center_x, self.drink_scene_active_index, body_rect)
             self._draw_drink_scene_reach(surface, body_rect, active_mug_rect)
 
-        if self.run_bartender_has_hat:
+        if self.round_bartender_has_hat or self.run_bartender_has_hat:
             self._draw_drink_scene_bartender_hat(surface, head_rect)
-        if self.run_bartender_has_bowtie:
-            self._draw_drink_scene_bartender_bowtie(surface, body_rect)
 
     def _draw_drink_scene_reach(
         self,
@@ -1302,6 +1317,48 @@ class Game:
         pygame.draw.polygon(surface, DRINK_SCENE_BARTENDER_BOWTIE_COLOR, left_points)
         pygame.draw.polygon(surface, DRINK_SCENE_BARTENDER_BOWTIE_COLOR, right_points)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_BOWTIE_COLOR, center_rect)
+
+    def _draw_drink_scene_bartender_glasses(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
+        total_bridge_width = DRINK_SCENE_BARTENDER_GLASSES_BRIDGE * 2
+        lens_width = (DRINK_SCENE_BARTENDER_GLASSES_WIDTH - total_bridge_width) // 2
+        lens_top = head_rect.top + DRINK_SCENE_BARTENDER_GLASSES_Y_OFFSET
+        left_lens_rect = pygame.Rect(
+            head_rect.centerx - DRINK_SCENE_BARTENDER_GLASSES_BRIDGE - lens_width,
+            lens_top,
+            lens_width,
+            DRINK_SCENE_BARTENDER_GLASSES_HEIGHT,
+        )
+        right_lens_rect = pygame.Rect(
+            head_rect.centerx + DRINK_SCENE_BARTENDER_GLASSES_BRIDGE,
+            lens_top,
+            lens_width,
+            DRINK_SCENE_BARTENDER_GLASSES_HEIGHT,
+        )
+        bridge_rect = pygame.Rect(
+            left_lens_rect.right,
+            lens_top + (DRINK_SCENE_BARTENDER_GLASSES_HEIGHT // 2) - 1,
+            right_lens_rect.left - left_lens_rect.right,
+            2,
+        )
+        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_GLASSES_COLOR, left_lens_rect, 1)
+        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_GLASSES_COLOR, right_lens_rect, 1)
+        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_GLASSES_COLOR, bridge_rect)
+
+    def _draw_drink_scene_bartender_cigar(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
+        cigar_rect = pygame.Rect(
+            head_rect.centerx - DRINK_SCENE_BARTENDER_CIGAR_X_OFFSET - DRINK_SCENE_BARTENDER_CIGAR_WIDTH,
+            head_rect.top + DRINK_SCENE_BARTENDER_CIGAR_Y_OFFSET,
+            DRINK_SCENE_BARTENDER_CIGAR_WIDTH,
+            DRINK_SCENE_BARTENDER_CIGAR_HEIGHT,
+        )
+        ember_rect = pygame.Rect(
+            cigar_rect.left,
+            cigar_rect.top,
+            2,
+            cigar_rect.height,
+        )
+        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_CIGAR_COLOR, cigar_rect)
+        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_CIGAR_EMBER_COLOR, ember_rect)
 
     def _draw_drink_scene_slots(self, surface: pygame.Surface, center_x: int) -> None:
         if not self.drink_scene_slots:
@@ -1571,6 +1628,8 @@ class Game:
         if self.first_round_cosmetic_test_pending:
             self.round_bartender_has_hat = True
             self.round_bartender_has_bowtie = True
+            self.round_bartender_has_glasses = True
+            self.round_bartender_has_cigar = True
             self.active_round_beer_theme = GREEN_BEER_THEME_ID
             self.first_round_cosmetic_test_pending = False
 
