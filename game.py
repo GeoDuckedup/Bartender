@@ -25,14 +25,15 @@ from tip import Tip
 # Early levels stay forgiving, then difficulty ramps through target count,
 # spawn cadence, and patron speed.
 LEVEL_ONE_TARGET_SERVES = 10
-LEVEL_TARGET_SERVES_STEP = 2
+LEVEL_TARGET_STEP_AMOUNT = 3
+LEVEL_TARGET_STEP_INTERVAL = 2
 LEVEL_ONE_SPAWN_INTERVAL = 3.0
-LEVEL_SPAWN_INTERVAL_STEP = 0.18
+LEVEL_SPAWN_INTERVAL_STEP = 0.17
 MIN_SPAWN_INTERVAL = 0.75
 LEVEL_ONE_MIN_WALK_SPEED = 16.0
-LEVEL_MIN_WALK_SPEED_STEP = 2.0
+LEVEL_MIN_WALK_SPEED_STEP = 1.9
 LEVEL_ONE_MAX_WALK_SPEED = 24.0
-LEVEL_MAX_WALK_SPEED_STEP = 3.0
+LEVEL_MAX_WALK_SPEED_STEP = 2.8
 LEVEL_ONE_SHOVE_WEIGHTS = (0.60, 0.25, 0.15)
 LEVEL_TWO_SHOVE_WEIGHTS = (0.55, 0.30, 0.15)
 LEVEL_THREE_PLUS_SHOVE_WEIGHTS = (0.50, 0.35, 0.15)
@@ -99,6 +100,13 @@ DRINK_SCENE_CONTINUE_BONUS_COLOR = pygame.Color("#E7C05A")
 DRINK_SCENE_SIGN_Y = 68
 DRINK_SCENE_SIGN_WIDTH = 300
 DRINK_SCENE_SIGN_HEIGHT = 52
+DRINK_SCENE_SIGN_GLOW_INFLATE = 14
+DRINK_SCENE_SIGN_GLOW_RADIUS = 12
+DRINK_SCENE_SIGN_BACKGROUND_INSET = 6
+DRINK_SCENE_SIGN_FRAME_RADIUS = 10
+DRINK_SCENE_SIGN_INNER_FRAME_INSET = 8
+DRINK_SCENE_SIGN_INNER_FRAME_WIDTH = 3
+DRINK_SCENE_SIGN_INNER_FRAME_RADIUS = 8
 DRINK_SCENE_CASH_X_OFFSET = 6
 DRINK_SCENE_CASH_Y_OFFSET = 12
 DRINK_SCENE_BAR_WIDTH = 344
@@ -107,6 +115,7 @@ DRINK_SCENE_BAR_Y = 208
 DRINK_SCENE_BAR_TOP_HEIGHT = 16
 DRINK_SCENE_BAR_TRIM_HEIGHT = 10
 DRINK_SCENE_BAR_COUNTER_HEIGHT = 12
+DRINK_SCENE_BAR_DIVIDER_LINE_WIDTH = 3
 DRINK_SCENE_SLOT_Y = 176
 DRINK_SCENE_SLOT_SPACING = 98
 DRINK_SCENE_SLOT_WIDTH = 32
@@ -115,6 +124,12 @@ DRINK_SCENE_LABEL_Y = 246
 DRINK_SCENE_BONUS_Y = 264
 DRINK_SCENE_COST_Y = 272
 DRINK_SCENE_STATUS_Y = 290
+DRINK_SCENE_SLOT_PURCHASED_GLOW_INFLATE = 10
+DRINK_SCENE_SLOT_PURCHASED_GLOW_WIDTH = 3
+DRINK_SCENE_SLOT_PURCHASED_GLOW_RADIUS = 8
+DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_INFLATE = 8
+DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_WIDTH = 2
+DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_RADIUS = 6
 DRINK_SCENE_BARTENDER_BODY_WIDTH = 54
 DRINK_SCENE_BARTENDER_BODY_HEIGHT = 92
 DRINK_SCENE_BARTENDER_HEAD_SIZE = 34
@@ -122,9 +137,16 @@ DRINK_SCENE_BARTENDER_SLOT_CENTER_OFFSET = 22
 DRINK_SCENE_BARTENDER_BODY_BOTTOM_OFFSET = 26
 DRINK_SCENE_BARTENDER_APRON_WIDTH = 22
 DRINK_SCENE_BARTENDER_APRON_Y = 24
+DRINK_SCENE_BARTENDER_APRON_BOTTOM_PADDING = 8
 DRINK_SCENE_BARTENDER_ARM_WIDTH = 14
 DRINK_SCENE_BARTENDER_ARM_HEIGHT = 44
+DRINK_SCENE_BARTENDER_LEFT_ARM_X_OFFSET = -10
+DRINK_SCENE_BARTENDER_LEFT_ARM_Y_OFFSET = 22
+DRINK_SCENE_BARTENDER_RIGHT_ARM_X_OFFSET = -4
+DRINK_SCENE_BARTENDER_RIGHT_ARM_Y_OFFSET = 20
 DRINK_SCENE_BARTENDER_HAND_SIZE = 10
+DRINK_SCENE_BARTENDER_HAND_X_INSET = 1
+DRINK_SCENE_BARTENDER_HAND_BOTTOM_OFFSET = 6
 DRINK_SCENE_GRAB_HAND_WIDTH = 14
 DRINK_SCENE_GRAB_HAND_HEIGHT = 17
 DRINK_SCENE_GRAB_HAND_OVERLAP = 5
@@ -441,7 +463,7 @@ def build_level_config(level_number: int) -> LevelConfig:
         shove_weights = LEVEL_THREE_PLUS_SHOVE_WEIGHTS
 
     return LevelConfig(
-        target_serves=LEVEL_ONE_TARGET_SERVES + ((level - 1) * LEVEL_TARGET_SERVES_STEP),
+        target_serves=LEVEL_ONE_TARGET_SERVES + (((level - 1) // LEVEL_TARGET_STEP_INTERVAL) * LEVEL_TARGET_STEP_AMOUNT),
         spawn_interval=max(MIN_SPAWN_INTERVAL, LEVEL_ONE_SPAWN_INTERVAL - ((level - 1) * LEVEL_SPAWN_INTERVAL_STEP)),
         min_walk_speed=LEVEL_ONE_MIN_WALK_SPEED + ((level - 1) * LEVEL_MIN_WALK_SPEED_STEP),
         max_walk_speed=LEVEL_ONE_MAX_WALK_SPEED + ((level - 1) * LEVEL_MAX_WALK_SPEED_STEP),
@@ -839,7 +861,6 @@ class Game:
         self.drink_scene_return_progress = 0.0
         self.flow_state = FlowState.PLAYING
         self.drink_scene_summary: dict[str, int | float] | None = None
-        self.awaiting_level_clear_release = False
         self.patron_rng = build_walk_speed_rng()
         self.tip_rng = Random(TIP_RNG_SEED)
         self._reset_level_progress()
@@ -852,7 +873,6 @@ class Game:
         self._activate_pending_round_beer_theme()
         self._activate_pending_round_tip_modifiers()
         self.drink_scene_summary = None
-        self.awaiting_level_clear_release = False
         self.drink_scene_slots = []
         self.drink_scene_selected_index = 0
         self.drink_scene_purchased_indices = set()
@@ -877,7 +897,6 @@ class Game:
         lives_bonus = self.lives * LIVES_REMAINING_BONUS
         self.score += lives_bonus
         self.flow_state = FlowState.LEVEL_CLEAR_DRINK_SCENE
-        self.awaiting_level_clear_release = False
         self.drink_scene_slots = self._build_drink_scene_slots()
         self.drink_scene_selected_index = 0
         self.drink_scene_purchased_indices = set()
@@ -935,14 +954,30 @@ class Game:
     def _drink_scene_selected_slot_center_x(self, center_x: int) -> int | None:
         if not self.drink_scene_slots:
             return None
+        return self._drink_scene_slot_center_x(center_x, self.drink_scene_selected_index)
+
+    def _drink_scene_slot_center_x(self, center_x: int, index: int) -> int:
         start_x = center_x - DRINK_SCENE_SLOT_SPACING
-        return start_x + (self.drink_scene_selected_index * DRINK_SCENE_SLOT_SPACING)
+        return start_x + (index * DRINK_SCENE_SLOT_SPACING)
 
     def _drink_scene_bartender_center_x(self, center_x: int) -> int:
         selected_slot_center_x = self._drink_scene_selected_slot_center_x(center_x)
         if selected_slot_center_x is None:
             return center_x
         return selected_slot_center_x + DRINK_SCENE_BARTENDER_SLOT_CENTER_OFFSET
+
+    def _drink_scene_sign_rect(self, center_x: int) -> pygame.Rect:
+        sign_rect = pygame.Rect(0, 0, DRINK_SCENE_SIGN_WIDTH, DRINK_SCENE_SIGN_HEIGHT)
+        sign_rect.center = (center_x, DRINK_SCENE_SIGN_Y)
+        return sign_rect
+
+    def _drink_scene_bar_rect(self, center_x: int) -> pygame.Rect:
+        return pygame.Rect(
+            center_x - (DRINK_SCENE_BAR_WIDTH // 2),
+            DRINK_SCENE_BAR_Y,
+            DRINK_SCENE_BAR_WIDTH,
+            DRINK_SCENE_BAR_HEIGHT,
+        )
 
     def _drink_scene_bartender_body_rect(self, center_x: int) -> pygame.Rect:
         bartender_center_x = self._drink_scene_bartender_center_x(center_x)
@@ -959,14 +994,21 @@ class Game:
             return 0.0
         return min(1.0, self.drink_scene_drink_progress / DRINK_SCENE_PICKUP_PROGRESS_PORTION)
 
+    def _drink_scene_grab_hand_rect(self, target_rect: pygame.Rect) -> pygame.Rect:
+        return pygame.Rect(
+            target_rect.left - (DRINK_SCENE_GRAB_HAND_WIDTH - DRINK_SCENE_GRAB_HAND_OVERLAP),
+            target_rect.centery - (DRINK_SCENE_GRAB_HAND_HEIGHT // 2),
+            DRINK_SCENE_GRAB_HAND_WIDTH,
+            DRINK_SCENE_GRAB_HAND_HEIGHT,
+        )
+
     def _drink_scene_slot_geometry(
         self,
         center_x: int,
         index: int,
         bartender_body_rect: pygame.Rect | None = None,
     ) -> tuple[pygame.Rect, float]:
-        start_x = center_x - DRINK_SCENE_SLOT_SPACING
-        slot_center_x = start_x + (index * DRINK_SCENE_SLOT_SPACING)
+        slot_center_x = self._drink_scene_slot_center_x(center_x, index)
         slot_center_y = DRINK_SCENE_SLOT_Y + (DRINK_SCENE_SLOT_HEIGHT // 2)
 
         mug_center_x = float(slot_center_x)
@@ -995,13 +1037,23 @@ class Game:
         return mug_rect, fill_ratio
 
     def _draw_drink_scene_sign(self, surface: pygame.Surface, center_x: int, level_number: int) -> None:
-        sign_rect = pygame.Rect(0, 0, DRINK_SCENE_SIGN_WIDTH, DRINK_SCENE_SIGN_HEIGHT)
-        sign_rect.center = (center_x, DRINK_SCENE_SIGN_Y)
-        glow_rect = sign_rect.inflate(14, 14)
-        pygame.draw.rect(surface, DRINK_SCENE_SIGN_GLOW_COLOR, glow_rect, border_radius=12)
-        pygame.draw.rect(surface, DRINK_SCENE_BACKGROUND_COLOR, glow_rect.inflate(-6, -6), border_radius=10)
-        pygame.draw.rect(surface, DRINK_SCENE_SIGN_FRAME_COLOR, sign_rect, border_radius=10)
-        pygame.draw.rect(surface, DRINK_SCENE_SIGN_GLOW_COLOR, sign_rect.inflate(-8, -8), 3, border_radius=8)
+        sign_rect = self._drink_scene_sign_rect(center_x)
+        glow_rect = sign_rect.inflate(DRINK_SCENE_SIGN_GLOW_INFLATE, DRINK_SCENE_SIGN_GLOW_INFLATE)
+        pygame.draw.rect(surface, DRINK_SCENE_SIGN_GLOW_COLOR, glow_rect, border_radius=DRINK_SCENE_SIGN_GLOW_RADIUS)
+        pygame.draw.rect(
+            surface,
+            DRINK_SCENE_BACKGROUND_COLOR,
+            glow_rect.inflate(-DRINK_SCENE_SIGN_BACKGROUND_INSET, -DRINK_SCENE_SIGN_BACKGROUND_INSET),
+            border_radius=DRINK_SCENE_SIGN_FRAME_RADIUS,
+        )
+        pygame.draw.rect(surface, DRINK_SCENE_SIGN_FRAME_COLOR, sign_rect, border_radius=DRINK_SCENE_SIGN_FRAME_RADIUS)
+        pygame.draw.rect(
+            surface,
+            DRINK_SCENE_SIGN_GLOW_COLOR,
+            sign_rect.inflate(-DRINK_SCENE_SIGN_INNER_FRAME_INSET, -DRINK_SCENE_SIGN_INNER_FRAME_INSET),
+            DRINK_SCENE_SIGN_INNER_FRAME_WIDTH,
+            border_radius=DRINK_SCENE_SIGN_INNER_FRAME_RADIUS,
+        )
 
         title_surface = self.drink_scene_title_font.render(
             f"LEVEL {level_number:02d} COMPLETE!",
@@ -1011,8 +1063,7 @@ class Game:
         surface.blit(title_surface, title_surface.get_rect(center=sign_rect.center))
 
     def _draw_drink_scene_cash(self, surface: pygame.Surface, center_x: int) -> None:
-        sign_rect = pygame.Rect(0, 0, DRINK_SCENE_SIGN_WIDTH, DRINK_SCENE_SIGN_HEIGHT)
-        sign_rect.center = (center_x, DRINK_SCENE_SIGN_Y)
+        sign_rect = self._drink_scene_sign_rect(center_x)
         cash_surface = self.drink_scene_detail_font.render(
             f"CASH {self._format_cash(self.cash)}",
             True,
@@ -1029,12 +1080,7 @@ class Game:
         return
 
     def _draw_drink_scene_bar_front(self, surface: pygame.Surface, center_x: int) -> None:
-        bar_rect = pygame.Rect(
-            center_x - (DRINK_SCENE_BAR_WIDTH // 2),
-            DRINK_SCENE_BAR_Y,
-            DRINK_SCENE_BAR_WIDTH,
-            DRINK_SCENE_BAR_HEIGHT,
-        )
+        bar_rect = self._drink_scene_bar_rect(center_x)
         top_rect = pygame.Rect(
             bar_rect.left,
             bar_rect.top,
@@ -1060,7 +1106,7 @@ class Game:
             DRINK_SCENE_SIGN_FRAME_COLOR,
             (top_rect.left, top_rect.bottom),
             (top_rect.right, top_rect.bottom),
-            3,
+            DRINK_SCENE_BAR_DIVIDER_LINE_WIDTH,
         )
         pygame.draw.rect(surface, DRINK_SCENE_BAR_FRONT_COLOR, front_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BAR_TRIM_COLOR, trim_rect)
@@ -1074,14 +1120,14 @@ class Game:
             DRINK_SCENE_BARTENDER_HEAD_SIZE,
         )
         left_arm_rect = pygame.Rect(
-            body_rect.left - 10,
-            body_rect.top + 22,
+            body_rect.left + DRINK_SCENE_BARTENDER_LEFT_ARM_X_OFFSET,
+            body_rect.top + DRINK_SCENE_BARTENDER_LEFT_ARM_Y_OFFSET,
             DRINK_SCENE_BARTENDER_ARM_WIDTH,
             DRINK_SCENE_BARTENDER_ARM_HEIGHT,
         )
         right_arm_rect = pygame.Rect(
-            body_rect.right - 4,
-            body_rect.top + 20,
+            body_rect.right + DRINK_SCENE_BARTENDER_RIGHT_ARM_X_OFFSET,
+            body_rect.top + DRINK_SCENE_BARTENDER_RIGHT_ARM_Y_OFFSET,
             DRINK_SCENE_BARTENDER_ARM_WIDTH,
             DRINK_SCENE_BARTENDER_ARM_HEIGHT,
         )
@@ -1089,7 +1135,7 @@ class Game:
             body_rect.centerx - (DRINK_SCENE_BARTENDER_APRON_WIDTH // 2),
             body_rect.top + DRINK_SCENE_BARTENDER_APRON_Y,
             DRINK_SCENE_BARTENDER_APRON_WIDTH,
-            body_rect.height - (DRINK_SCENE_BARTENDER_APRON_Y + 8),
+            body_rect.height - (DRINK_SCENE_BARTENDER_APRON_Y + DRINK_SCENE_BARTENDER_APRON_BOTTOM_PADDING),
         )
         left_leg_rect = pygame.Rect(
             body_rect.centerx - DRINK_SCENE_BARTENDER_LEG_GAP - DRINK_SCENE_BARTENDER_LEG_WIDTH,
@@ -1104,14 +1150,14 @@ class Game:
             DRINK_SCENE_BARTENDER_LEG_HEIGHT,
         )
         left_hand_rect = pygame.Rect(
-            left_arm_rect.left + 1,
-            left_arm_rect.bottom - 6,
+            left_arm_rect.left + DRINK_SCENE_BARTENDER_HAND_X_INSET,
+            left_arm_rect.bottom - DRINK_SCENE_BARTENDER_HAND_BOTTOM_OFFSET,
             DRINK_SCENE_BARTENDER_HAND_SIZE,
             DRINK_SCENE_BARTENDER_HAND_SIZE,
         )
         right_hand_rect = pygame.Rect(
-            right_arm_rect.right - DRINK_SCENE_BARTENDER_HAND_SIZE - 1,
-            right_arm_rect.bottom - 6,
+            right_arm_rect.right - DRINK_SCENE_BARTENDER_HAND_SIZE - DRINK_SCENE_BARTENDER_HAND_X_INSET,
+            right_arm_rect.bottom - DRINK_SCENE_BARTENDER_HAND_BOTTOM_OFFSET,
             DRINK_SCENE_BARTENDER_HAND_SIZE,
             DRINK_SCENE_BARTENDER_HAND_SIZE,
         )
@@ -1147,20 +1193,12 @@ class Game:
             surface,
             DRINK_SCENE_BARTENDER_SHIRT_COLOR,
             (shoulder_x, shoulder_y),
-            (
-                target_rect.left - (DRINK_SCENE_GRAB_HAND_WIDTH // 2),
-                target_rect.centery,
-            ),
+            self._drink_scene_grab_hand_rect(target_rect).center,
             DRINK_SCENE_BARTENDER_ARM_WIDTH,
         )
-    
+
     def _draw_drink_scene_grab_hand(self, surface: pygame.Surface, target_rect: pygame.Rect) -> None:
-        hand_rect = pygame.Rect(
-            target_rect.left - (DRINK_SCENE_GRAB_HAND_WIDTH - DRINK_SCENE_GRAB_HAND_OVERLAP),
-            target_rect.centery - (DRINK_SCENE_GRAB_HAND_HEIGHT // 2),
-            DRINK_SCENE_GRAB_HAND_WIDTH,
-            DRINK_SCENE_GRAB_HAND_HEIGHT,
-        )
+        hand_rect = self._drink_scene_grab_hand_rect(target_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SKIN_COLOR, hand_rect)
 
     def _draw_drink_scene_bartender_hat(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
@@ -1208,9 +1246,8 @@ class Game:
 
         beer_fill_color = self._active_beer_fill_color()
         bartender_body_rect = self._drink_scene_bartender_body_rect(center_x)
-        start_x = center_x - DRINK_SCENE_SLOT_SPACING
         for index, slot in enumerate(self.drink_scene_slots):
-            mug_center_x = start_x + (index * DRINK_SCENE_SLOT_SPACING)
+            mug_center_x = self._drink_scene_slot_center_x(center_x, index)
             is_purchased = index in self.drink_scene_purchased_indices
             mug_rect, fill_ratio = self._drink_scene_slot_geometry(center_x, index, bartender_body_rect)
             if is_purchased:
@@ -1224,16 +1261,31 @@ class Game:
             )
 
             if is_purchased:
-                glow_rect = mug_rect.inflate(10, 10)
-                pygame.draw.rect(surface, DRINK_SCENE_PURCHASED_GLOW_COLOR, glow_rect, 3, border_radius=8)
+                glow_rect = mug_rect.inflate(DRINK_SCENE_SLOT_PURCHASED_GLOW_INFLATE, DRINK_SCENE_SLOT_PURCHASED_GLOW_INFLATE)
+                pygame.draw.rect(
+                    surface,
+                    DRINK_SCENE_PURCHASED_GLOW_COLOR,
+                    glow_rect,
+                    DRINK_SCENE_SLOT_PURCHASED_GLOW_WIDTH,
+                    border_radius=DRINK_SCENE_SLOT_PURCHASED_GLOW_RADIUS,
+                )
             if index == self.drink_scene_selected_index:
-                highlight_rect = mug_rect.inflate(8, 8)
+                highlight_rect = mug_rect.inflate(
+                    DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_INFLATE,
+                    DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_INFLATE,
+                )
                 highlight_color = DRINK_SCENE_SELECTED_OUTLINE_COLOR
                 if is_purchased:
                     highlight_color = DRINK_SCENE_PURCHASED_GLOW_COLOR
                 elif slot.kind == "upgrade" and not self._can_afford_drink_scene_slot(slot):
                     highlight_color = DRINK_SCENE_UNAFFORDABLE_COLOR
-                pygame.draw.rect(surface, highlight_color, highlight_rect, 2, border_radius=6)
+                pygame.draw.rect(
+                    surface,
+                    highlight_color,
+                    highlight_rect,
+                    DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_WIDTH,
+                    border_radius=DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_RADIUS,
+                )
 
             if slot.kind == "upgrade" and slot.offer is not None:
                 label = self._format_drink_scene_offer_label(slot.offer)
