@@ -294,24 +294,32 @@ FOCUS_JS = """        const blockedKeys = new Set([
 
         window.hideSplashArt = hideSplashArt
 
-        const needsVerticalKeyBridge = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+        const needsDirectionalKeyBridge = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
         window.codexInputBridge = window.codexInputBridge || { queue: [] }
 
-        const bridgeVerticalKey = (event) => {
-            if (!needsVerticalKeyBridge || event.repeat) {
+        const bridgeDirectionalKey = (event) => {
+            if (!needsDirectionalKeyBridge || event.repeat) {
                 return
             }
-            const verticalKeyMap = {
+            const directionalKeyMap = {
                 ArrowUp: "UP",
                 Up: "UP",
                 ArrowDown: "DOWN",
                 Down: "DOWN",
+                ArrowLeft: "LEFT",
+                Left: "LEFT",
+                ArrowRight: "RIGHT",
+                Right: "RIGHT",
                 w: "UP",
                 W: "UP",
+                a: "LEFT",
+                A: "LEFT",
                 s: "DOWN",
                 S: "DOWN",
+                d: "RIGHT",
+                D: "RIGHT",
             }
-            const bridgedKey = verticalKeyMap[event.key]
+            const bridgedKey = directionalKeyMap[event.key]
             if (bridgedKey) {
                 window.codexInputBridge.queue.push(bridgedKey)
             }
@@ -343,7 +351,7 @@ FOCUS_JS = """        const blockedKeys = new Set([
         window.addEventListener(
             "keydown",
             (event) => {
-                bridgeVerticalKey(event)
+                bridgeDirectionalKey(event)
                 if (blockedKeys.has(event.key)) {
                     event.preventDefault()
                     focusCanvas()

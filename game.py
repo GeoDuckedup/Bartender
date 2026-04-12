@@ -919,6 +919,29 @@ class Game:
         else:
             self.bartender.move_down()
 
+    def _handle_horizontal_navigation(self, direction: int) -> None:
+        if self.flow_state is FlowState.FAILING:
+            return
+
+        if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
+            if direction < 0:
+                self.high_score_cursor = max(0, self.high_score_cursor - 1)
+            else:
+                self.high_score_cursor = min(HIGH_SCORE_INITIALS_LENGTH - 1, self.high_score_cursor + 1)
+            self.high_score_invalid_flash_timer = 0.0
+            return
+
+        if self.flow_state is FlowState.GAME_OVER:
+            return
+
+        if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
+            if self._is_drink_scene_drinking():
+                return
+            self._move_drink_scene_selection(direction)
+            return
+
+        return
+
     def _consume_browser_input_bridge(self) -> None:
         if sys.platform != "emscripten":
             return
@@ -939,6 +962,10 @@ class Game:
                 self._handle_vertical_navigation(-1)
             elif token == "DOWN":
                 self._handle_vertical_navigation(1)
+            elif token == "LEFT":
+                self._handle_horizontal_navigation(-1)
+            elif token == "RIGHT":
+                self._handle_horizontal_navigation(1)
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.flow_state is FlowState.FAILING:
@@ -952,11 +979,9 @@ class Game:
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self._handle_vertical_navigation(1)
             elif event.key in (pygame.K_LEFT, pygame.K_a):
-                self.high_score_cursor = max(0, self.high_score_cursor - 1)
-                self.high_score_invalid_flash_timer = 0.0
+                self._handle_horizontal_navigation(-1)
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                self.high_score_cursor = min(HIGH_SCORE_INITIALS_LENGTH - 1, self.high_score_cursor + 1)
-                self.high_score_invalid_flash_timer = 0.0
+                self._handle_horizontal_navigation(1)
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                 self._submit_high_score_entry()
             return
@@ -982,9 +1007,9 @@ class Game:
                 elif self._is_drink_scene_drinking():
                     return
                 elif event.key in (pygame.K_LEFT, pygame.K_a):
-                    self._move_drink_scene_selection(-1)
+                    self._handle_horizontal_navigation(-1)
                 elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                    self._move_drink_scene_selection(1)
+                    self._handle_horizontal_navigation(1)
             elif event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
                 self._pause_drink_scene_drink()
             return
