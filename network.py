@@ -49,18 +49,20 @@ async def _browser_json_request(
     method: str = "GET",
     body: dict[str, Any] | None = None,
 ) -> tuple[bool, Any]:
-    from pyodide.http import pyfetch
+    import platform
+    from pyodide.ffi import to_js
 
-    kwargs: dict[str, Any] = {
+    request_options: dict[str, Any] = {
         "method": method,
     }
     if body is not None:
-        kwargs["headers"] = {"Content-Type": "application/json"}
-        kwargs["body"] = json.dumps(body)
+        request_options["headers"] = {"Content-Type": "application/json"}
+        request_options["body"] = json.dumps(body)
 
-    response = await pyfetch(url, **kwargs)
+    response = await platform.window.fetch(url, to_js(request_options))
     try:
-        payload = await response.json()
+        raw_text = await response.text()
+        payload = json.loads(raw_text) if raw_text else None
     except Exception:
         payload = None
     return (response.ok, payload)
