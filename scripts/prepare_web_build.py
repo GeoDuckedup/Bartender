@@ -128,9 +128,41 @@ FOCUS_JS = """        const focusCanvas = () => {
             canvas.focus()
         }
 
+        const hideSplashArt = () => {
+            const splashArt = document.getElementById("splash-art")
+            if (!splashArt) {
+                return
+            }
+            document.body.classList.add("started")
+            splashArt.style.opacity = "0"
+            splashArt.style.visibility = "hidden"
+            splashArt.style.pointerEvents = "none"
+            splashArt.style.display = "none"
+        }
+
+        window.hideSplashArt = hideSplashArt
+
         ;["click", "mousedown", "touchstart"].forEach((eventName) => {
-            canvas.addEventListener(eventName, focusCanvas, { passive: true })
-            document.addEventListener(eventName, focusCanvas, { passive: true })
+            canvas.addEventListener(
+                eventName,
+                () => {
+                    focusCanvas()
+                    if (window.MM && window.MM.UME) {
+                        hideSplashArt()
+                    }
+                },
+                { passive: true }
+            )
+            document.addEventListener(
+                eventName,
+                () => {
+                    focusCanvas()
+                    if (window.MM && window.MM.UME) {
+                        hideSplashArt()
+                    }
+                },
+                { passive: true }
+            )
         })
 
         window.addEventListener(
@@ -159,6 +191,9 @@ FOCUS_JS = """        const focusCanvas = () => {
                     focusCanvas()
                     if ((event.key === " " || event.key === "Spacebar") && window.MM && !window.MM.UME) {
                         window.MM.UME = true
+                    }
+                    if (window.MM && window.MM.UME) {
+                        hideSplashArt()
                     }
                 }
             },
@@ -232,7 +267,7 @@ def patch_index_html(html: str) -> str:
     html = replace_once(
         html,
         "        while not platform.window.MM.UME:\n            await asyncio.sleep(.1)\n",
-        "        while not platform.window.MM.UME:\n            await asyncio.sleep(.1)\n\n        platform.window.document.body.classList.add(\"started\")\n",
+        "        while not platform.window.MM.UME:\n            await asyncio.sleep(.1)\n\n        platform.window.document.body.classList.add(\"started\")\n        if hasattr(platform.window, \"hideSplashArt\"):\n            platform.window.hideSplashArt()\n",
     )
     html = replace_once(
         html,
