@@ -124,8 +124,39 @@ BODY_BLOCK = """        body {
         }
 """
 
-FOCUS_JS = """        const focusCanvas = () => {
-            canvas.focus()
+FOCUS_JS = """        const blockedKeys = new Set([
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+            "Up",
+            "Down",
+            "Left",
+            "Right",
+            " ",
+            "Spacebar",
+            "w",
+            "W",
+            "a",
+            "A",
+            "s",
+            "S",
+            "d",
+            "D",
+            "f",
+            "F",
+        ])
+
+        const focusCanvas = () => {
+            canvas.setAttribute("tabindex", "0")
+            if (typeof window.focus === "function") {
+                window.focus()
+            }
+            try {
+                canvas.focus({ preventScroll: true })
+            } catch (_error) {
+                canvas.focus()
+            }
         }
 
         const hideSplashArt = () => {
@@ -168,24 +199,6 @@ FOCUS_JS = """        const focusCanvas = () => {
         window.addEventListener(
             "keydown",
             (event) => {
-                const blockedKeys = new Set([
-                    "ArrowUp",
-                    "ArrowDown",
-                    "ArrowLeft",
-                    "ArrowRight",
-                    " ",
-                    "Spacebar",
-                    "w",
-                    "W",
-                    "a",
-                    "A",
-                    "s",
-                    "S",
-                    "d",
-                    "D",
-                    "f",
-                    "F",
-                ])
                 if (blockedKeys.has(event.key)) {
                     event.preventDefault()
                     focusCanvas()
@@ -195,6 +208,17 @@ FOCUS_JS = """        const focusCanvas = () => {
                     if (window.MM && window.MM.UME) {
                         hideSplashArt()
                     }
+                }
+            },
+            { capture: true }
+        )
+
+        window.addEventListener(
+            "keyup",
+            (event) => {
+                if (blockedKeys.has(event.key)) {
+                    event.preventDefault()
+                    focusCanvas()
                 }
             },
             { capture: true }

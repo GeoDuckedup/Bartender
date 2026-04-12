@@ -890,20 +890,20 @@ class Game:
         if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
             if event.type != pygame.KEYDOWN:
                 return
-            if event.key == pygame.K_UP:
+            if event.key in (pygame.K_UP, pygame.K_w):
                 self.high_score_initials[self.high_score_cursor] = (
                     self.high_score_initials[self.high_score_cursor] + 1
                 ) % 26
                 self.high_score_invalid_flash_timer = 0.0
-            elif event.key == pygame.K_DOWN:
+            elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self.high_score_initials[self.high_score_cursor] = (
                     self.high_score_initials[self.high_score_cursor] - 1
                 ) % 26
                 self.high_score_invalid_flash_timer = 0.0
-            elif event.key == pygame.K_LEFT:
+            elif event.key in (pygame.K_LEFT, pygame.K_a):
                 self.high_score_cursor = max(0, self.high_score_cursor - 1)
                 self.high_score_invalid_flash_timer = 0.0
-            elif event.key == pygame.K_RIGHT:
+            elif event.key in (pygame.K_RIGHT, pygame.K_d):
                 self.high_score_cursor = min(HIGH_SCORE_INITIALS_LENGTH - 1, self.high_score_cursor + 1)
                 self.high_score_invalid_flash_timer = 0.0
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
