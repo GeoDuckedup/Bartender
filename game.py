@@ -1,12 +1,28 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
 from random import Random
+import time
 
 import pygame
 
-from bartender import BARTENDER_CATCH_RECT_PADDING, BARTENDER_WALK_SPEED, Bartender
+from bartender import (
+    BARTENDER_APRON_COLOR,
+    BARTENDER_BOWTIE_COLOR,
+    BARTENDER_CATCH_RECT_PADDING,
+    BARTENDER_CIGAR_COLOR,
+    BARTENDER_CIGAR_EMBER_COLOR,
+    BARTENDER_GLASSES_COLOR,
+    BARTENDER_HAT_BRIM_COLOR,
+    BARTENDER_HAT_COLOR,
+    BARTENDER_WALK_SPEED,
+    BARTENDER_BODY_COLOR,
+    Bartender,
+)
 from glass import (
     FLYING_GLASS_SPEED,
     GREEN_BEER_FILL_COLOR,
@@ -16,6 +32,7 @@ from glass import (
     draw_glass_with_fill,
 )
 from hud import HUDRenderer
+from network import fetch_leaderboard, submit_score
 from patron import PATRON_ARCHETYPES, Patron, build_walk_speed_rng
 from renderer import BAR_COUNT, GLASS_OUTLINE_COLOR, SceneRenderer
 from tip import Tip
@@ -78,6 +95,23 @@ FAIL_SHAKE_FPS = 30
 OVERLAY_TEXT_COLOR = pygame.Color("#F5F0E8")
 GAME_OVER_TITLE_Y = 138
 GAME_OVER_PROMPT_Y = 160
+HIGH_SCORE_ENTRY_TITLE_Y = 104
+HIGH_SCORE_ENTRY_SCORE_Y = 128
+HIGH_SCORE_ENTRY_LETTERS_Y = 170
+HIGH_SCORE_ENTRY_UNDERSCORE_Y = 190
+HIGH_SCORE_ENTRY_PROMPT_Y = 220
+HIGH_SCORE_ENTRY_CONFIRM_Y = 248
+HIGH_SCORE_ENTRY_SLOT_SPACING = 34
+HIGH_SCORE_ENTRY_CURSOR_BLINK_MS = 400
+HIGH_SCORE_ENTRY_INVALID_FLASH_DURATION = 0.45
+HIGH_SCORE_ENTRY_INVALID_COLOR = pygame.Color("#D36A61")
+GAME_OVER_LEADERBOARD_HEADER_Y = 194
+GAME_OVER_LEADERBOARD_FIRST_ROW_Y = 210
+GAME_OVER_LEADERBOARD_ROW_HEIGHT = 14
+GAME_OVER_LEADERBOARD_SCROLL_UP_Y = 184
+GAME_OVER_LEADERBOARD_SCROLL_DOWN_Y = 284
+GAME_OVER_LEADERBOARD_HEADER_COLOR = pygame.Color("#D7C7A8")
+GAME_OVER_LEADERBOARD_RANK_COLOR = pygame.Color("#B6A98D")
 DRINK_SCENE_PURCHASED_GLOW_COLOR = pygame.Color("#E7C05A")
 DRINK_SCENE_PURCHASED_LABEL = "BOUGHT"
 
@@ -226,6 +260,22 @@ FAIL_OVERLAY_COLOR = (32, 0, 0, FAIL_OVERLAY_ALPHA)
 GAME_OVER_OVERLAY_COLOR = (0, 0, 0, GAME_OVER_OVERLAY_ALPHA)
 FAIL_MESSAGE_Y = 156
 
+# High score data model:
+# Local storage keeps the top 10 entries ready for the upcoming
+# initials-entry and leaderboard display phases.
+HIGH_SCORE_FILE_PATH = Path(__file__).with_name("high_scores.json")
+HIGH_SCORE_LEADERBOARD_SIZE = 10
+HIGH_SCORE_INITIALS_LENGTH = 3
+BLOCKED_INITIALS = frozenset({
+    "ASS", "FUK", "FUC", "FCK", "SHT", "SHI", "DIK", "DIQ",
+    "DIC", "COK", "COC", "CUM", "FAG", "FAT", "GAY", "GOD",
+    "JEW", "KKK", "NIG", "NGA", "NGR", "PIS", "POO", "SEX",
+    "TIT", "TTS", "WTF", "STF", "SUK", "SUC", "VAG", "WOP",
+    "KYS", "RAP", "FKU", "CNT", "CUN", "HOR", "HO3",
+    "ANU", "ANL", "BUT", "BUM", "DAM", "DMN", "HEL",
+    "JIZ", "KIK", "PEN", "PHK", "SCK", "SLT", "SMD",
+})
+
 # Cosmetic state ids:
 # These are stored in run/round state so future cosmetic phases can stay data-driven.
 GREEN_BEER_THEME_ID = "green_night"
@@ -239,11 +289,37 @@ CIGAR_COSMETIC_ID = "cigar"
 # A fresh run starts with these cosmetics for the opening round only.
 ENABLE_FIRST_ROUND_COSMETIC_TEST = False
 
+# Theme palettes:
+# Single-round beer themes can also recolor bartender wearables and clothing.
+THEME_PALETTES: dict[str, dict[str, pygame.Color]] = {
+    GREEN_BEER_THEME_ID: {
+        "shirt": pygame.Color("#2E8B2E"),
+        "hat": pygame.Color("#1A6B1A"),
+        "hat_brim": pygame.Color("#145214"),
+        "bowtie": pygame.Color("#3DA53D"),
+        "glasses": pygame.Color("#1A5C1A"),
+        "cigar": pygame.Color("#3B6B3B"),
+        "cigar_ember": pygame.Color("#4CAF50"),
+        "apron": pygame.Color("#2D7A2D"),
+    },
+    WINE_BEER_THEME_ID: {
+        "shirt": pygame.Color("#D4839E"),
+        "hat": pygame.Color("#8B2252"),
+        "hat_brim": pygame.Color("#6B1A3E"),
+        "bowtie": pygame.Color("#C46A8A"),
+        "glasses": pygame.Color("#7A2A50"),
+        "cigar": pygame.Color("#9E5070"),
+        "cigar_ember": pygame.Color("#E8829E"),
+        "apron": pygame.Color("#A85070"),
+    },
+}
+
 
 class FlowState(Enum):
     PLAYING = auto()
     FAILING = auto()
     LEVEL_CLEAR_DRINK_SCENE = auto()
+    HIGH_SCORE_ENTRY = auto()
     GAME_OVER = auto()
 
 
@@ -415,7 +491,7 @@ GREEN_NIGHT_UPGRADE = UpgradeDefinition(
     description="Next round pours bright green beer.",
     effect_type="green_night",
     base_cost=3,
-    cost_per_level=1,
+    cost_per_level=0,
     base_bonus=0.0,
     bonus_per_level=0.0,
     min_level=1,
@@ -430,7 +506,7 @@ WINE_NIGHT_UPGRADE = UpgradeDefinition(
     description="Next round pours deep red wine-colored drinks.",
     effect_type="wine_night",
     base_cost=3,
-    cost_per_level=1,
+    cost_per_level=0,
     base_bonus=0.0,
     bonus_per_level=0.0,
     min_level=1,
@@ -524,6 +600,41 @@ ALL_UPGRADE_DEFINITIONS = GAMEPLAY_UPGRADE_DEFINITIONS + COSMETIC_UPGRADE_DEFINI
 UPGRADE_DEFINITIONS = ALL_UPGRADE_DEFINITIONS
 
 
+@dataclass(frozen=True)
+class HighScoreEntry:
+    initials: str
+    score: int
+    level: int
+    timestamp: int
+
+    def to_dict(self) -> dict[str, int | str]:
+        return {
+            "initials": self.initials,
+            "score": self.score,
+            "level": self.level,
+            "timestamp": self.timestamp,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> HighScoreEntry | None:
+        initials = payload.get("initials")
+        score = payload.get("score")
+        level = payload.get("level")
+        timestamp = payload.get("timestamp")
+        if not isinstance(initials, str) or len(initials) != HIGH_SCORE_INITIALS_LENGTH:
+            return None
+        if not initials.isalpha() or initials.upper() != initials:
+            return None
+        if not isinstance(score, int) or not isinstance(level, int) or not isinstance(timestamp, int):
+            return None
+        return cls(
+            initials=initials,
+            score=score,
+            level=level,
+            timestamp=timestamp,
+        )
+
+
 def build_level_config(level_number: int) -> LevelConfig:
     level = max(1, level_number)
     if level == 1:
@@ -552,9 +663,13 @@ class Game:
         self.hud_renderer = HUDRenderer()
         self.overlay_font = pygame.font.SysFont("couriernew", 18, bold=True)
         self.detail_font = pygame.font.SysFont("couriernew", 12, bold=True)
+        self.high_score_entry_font = pygame.font.SysFont("couriernew", 24, bold=True)
         self.drink_scene_title_font = pygame.font.SysFont("couriernew", 20, bold=True)
         self.drink_scene_detail_font = pygame.font.SysFont("couriernew", 14, bold=True)
+        self.high_scores = self._load_high_scores()
+        self.background_tasks: set[asyncio.Task[object]] = set()
         self._reset_game()
+        self._schedule_leaderboard_refresh()
 
     @staticmethod
     def _format_cash(amount: float) -> str:
@@ -579,12 +694,225 @@ class Game:
             return f"+{int(round(percent))}%"
         return f"+{percent:.1f}%"
 
+    @staticmethod
+    def _sort_high_scores(entries: list[HighScoreEntry]) -> list[HighScoreEntry]:
+        return sorted(
+            entries,
+            key=lambda entry: (-entry.score, -entry.level, entry.timestamp, entry.initials),
+        )[:HIGH_SCORE_LEADERBOARD_SIZE]
+
+    @staticmethod
+    def _default_high_score_entry_timestamp() -> int:
+        return int(time.time())
+
+    def _load_high_scores(self) -> list[HighScoreEntry]:
+        try:
+            raw_payload = json.loads(HIGH_SCORE_FILE_PATH.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return []
+
+        if not isinstance(raw_payload, list):
+            return []
+
+        entries: list[HighScoreEntry] = []
+        for raw_entry in raw_payload:
+            if not isinstance(raw_entry, dict):
+                continue
+            parsed_entry = HighScoreEntry.from_dict(raw_entry)
+            if parsed_entry is not None:
+                entries.append(parsed_entry)
+        return self._sort_high_scores(entries)
+
+    def _save_high_scores(self) -> None:
+        serialized_entries = [entry.to_dict() for entry in self.high_scores]
+        try:
+            HIGH_SCORE_FILE_PATH.write_text(
+                json.dumps(serialized_entries, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            return
+
+    def _qualifies_for_high_scores(self, score: int, level: int) -> bool:
+        if len(self.high_scores) < HIGH_SCORE_LEADERBOARD_SIZE:
+            return True
+        return score > self.high_scores[-1].score
+
+    def _record_high_score(
+        self,
+        initials: str,
+        score: int,
+        level: int,
+        *,
+        timestamp: int | None = None,
+    ) -> HighScoreEntry:
+        entry = HighScoreEntry(
+            initials=initials.upper(),
+            score=score,
+            level=level,
+            timestamp=timestamp if timestamp is not None else self._default_high_score_entry_timestamp(),
+        )
+        self.high_scores = self._sort_high_scores(self.high_scores + [entry])
+        self._save_high_scores()
+        return entry
+
+    def _start_background_task(self, coroutine: object) -> None:
+        try:
+            task = asyncio.ensure_future(coroutine)
+        except RuntimeError:
+            return
+        self.background_tasks.add(task)
+        task.add_done_callback(self.background_tasks.discard)
+
+    def _log_network_error(self, message: str, error: Exception | None = None) -> None:
+        details = message if error is None else f"{message}: {error}"
+        print(details)
+
+    def _entry_from_network_payload(self, payload: dict[str, object]) -> HighScoreEntry | None:
+        initials = payload.get("initials")
+        score = payload.get("score")
+        level = payload.get("level")
+        timestamp = payload.get("timestamp")
+        if not isinstance(initials, str):
+            return None
+        if not isinstance(score, (int, float)):
+            return None
+        if not isinstance(level, (int, float)):
+            return None
+        if not isinstance(timestamp, (int, float)):
+            return None
+        normalized_payload: dict[str, object] = {
+            "initials": initials.upper(),
+            "score": int(score),
+            "level": int(level),
+            "timestamp": int(timestamp),
+        }
+        return HighScoreEntry.from_dict(normalized_payload)
+
+    async def _refresh_leaderboard_task(
+        self,
+        *,
+        optimistic_entry: HighScoreEntry | None = None,
+    ) -> None:
+        entries_payload = await fetch_leaderboard()
+        if entries_payload:
+            fetched_entries: list[HighScoreEntry] = []
+            for entry_payload in entries_payload:
+                entry = self._entry_from_network_payload(entry_payload)
+                if entry is not None:
+                    fetched_entries.append(entry)
+            self.high_scores = self._sort_high_scores(fetched_entries)
+            self._save_high_scores()
+            return
+
+        if optimistic_entry is not None:
+            self.high_scores = self._sort_high_scores(self.high_scores + [optimistic_entry])
+            self._save_high_scores()
+
+    def _schedule_leaderboard_refresh(
+        self,
+        *,
+        optimistic_entry: HighScoreEntry | None = None,
+    ) -> None:
+        self._start_background_task(
+            self._refresh_leaderboard_task(optimistic_entry=optimistic_entry),
+        )
+
+    async def _submit_score_task(self, optimistic_entry: HighScoreEntry) -> None:
+        success = await submit_score(
+            optimistic_entry.initials,
+            optimistic_entry.score,
+            optimistic_entry.level,
+        )
+        if not success:
+            self._log_network_error("High score submission failed")
+            return
+        self._schedule_leaderboard_refresh(optimistic_entry=optimistic_entry)
+
+    def _reset_high_score_entry_state(self) -> None:
+        self.high_score_entry_active = False
+        self.high_score_initials = [0] * HIGH_SCORE_INITIALS_LENGTH
+        self.high_score_cursor = 0
+        self.high_score_invalid_flash_timer = 0.0
+        self.high_score_scroll_offset = 0
+        self.high_score_recent_entry = None
+
+    def _current_high_score_initials_text(self) -> str:
+        return "".join(chr(ord("A") + index) for index in self.high_score_initials)
+
+    def _begin_high_score_entry(self) -> None:
+        self.high_score_entry_active = True
+        self.high_score_initials = [0] * HIGH_SCORE_INITIALS_LENGTH
+        self.high_score_cursor = 0
+        self.high_score_invalid_flash_timer = 0.0
+        self.high_score_recent_entry = None
+        self.flow_state = FlowState.HIGH_SCORE_ENTRY
+
+    def _trigger_high_score_invalid_flash(self) -> None:
+        self.high_score_invalid_flash_timer = HIGH_SCORE_ENTRY_INVALID_FLASH_DURATION
+
+    def _submit_high_score_entry(self) -> None:
+        initials = self._current_high_score_initials_text()
+        if initials in BLOCKED_INITIALS:
+            self._trigger_high_score_invalid_flash()
+            return
+        self.high_score_recent_entry = HighScoreEntry(
+            initials,
+            self.score,
+            self.current_level,
+            self._default_high_score_entry_timestamp(),
+        )
+        self.high_score_invalid_flash_timer = 0.0
+        self.high_score_entry_active = False
+        self.flow_state = FlowState.GAME_OVER
+        self._start_background_task(self._submit_score_task(self.high_score_recent_entry))
+
+    def _can_scroll_high_scores_down(self) -> bool:
+        return len(self.high_scores) > 5 and self.high_score_scroll_offset == 0
+
+    def _can_scroll_high_scores_up(self) -> bool:
+        return self.high_score_scroll_offset > 0
+
+    def _visible_high_score_entries(self) -> list[HighScoreEntry]:
+        if self.high_score_scroll_offset <= 0:
+            return self.high_scores[:5]
+        return self.high_scores[5:10]
+
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.flow_state is FlowState.FAILING:
             return
 
+        if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
+            if event.type != pygame.KEYDOWN:
+                return
+            if event.key == pygame.K_UP:
+                self.high_score_initials[self.high_score_cursor] = (
+                    self.high_score_initials[self.high_score_cursor] + 1
+                ) % 26
+                self.high_score_invalid_flash_timer = 0.0
+            elif event.key == pygame.K_DOWN:
+                self.high_score_initials[self.high_score_cursor] = (
+                    self.high_score_initials[self.high_score_cursor] - 1
+                ) % 26
+                self.high_score_invalid_flash_timer = 0.0
+            elif event.key == pygame.K_LEFT:
+                self.high_score_cursor = max(0, self.high_score_cursor - 1)
+                self.high_score_invalid_flash_timer = 0.0
+            elif event.key == pygame.K_RIGHT:
+                self.high_score_cursor = min(HIGH_SCORE_INITIALS_LENGTH - 1, self.high_score_cursor + 1)
+                self.high_score_invalid_flash_timer = 0.0
+            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                self._submit_high_score_entry()
+            return
+
         if self.flow_state is FlowState.GAME_OVER:
             if event.type == pygame.KEYDOWN:
+                if self.high_scores and event.key in (pygame.K_UP, pygame.K_DOWN):
+                    if event.key == pygame.K_UP and self._can_scroll_high_scores_up():
+                        self.high_score_scroll_offset = 0
+                    elif event.key == pygame.K_DOWN and self._can_scroll_high_scores_down():
+                        self.high_score_scroll_offset = 1
+                    return
                 self._reset_game()
             return
 
@@ -645,6 +973,10 @@ class Game:
             self._update_drink_scene_drink(dt)
             return
 
+        if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
+            self.high_score_invalid_flash_timer = max(0.0, self.high_score_invalid_flash_timer - dt)
+            return
+
         if self.flow_state is FlowState.GAME_OVER:
             return
 
@@ -689,6 +1021,10 @@ class Game:
             self._draw_level_clear_drink_scene(surface)
             return
 
+        if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
+            self._draw_frame(surface)
+            return
+
         self._draw_frame(surface)
 
     def _draw_frame(self, surface: pygame.Surface) -> None:
@@ -718,6 +1054,8 @@ class Game:
         )
         if self.flow_state is FlowState.GAME_OVER:
             self._draw_game_over_overlay(surface)
+        elif self.flow_state is FlowState.HIGH_SCORE_ENTRY:
+            self._draw_high_score_entry_overlay(surface)
 
     def _handle_serves(self) -> None:
         active_glasses = []
@@ -936,6 +1274,7 @@ class Game:
         self.drink_scene_return_progress = 0.0
         self.flow_state = FlowState.PLAYING
         self.drink_scene_summary: dict[str, int | float] | None = None
+        self._reset_high_score_entry_state()
         self.patron_rng = build_walk_speed_rng()
         self.tip_rng = Random(TIP_RNG_SEED)
         self._reset_level_progress()
@@ -989,6 +1328,7 @@ class Game:
         overlay.fill(GAME_OVER_OVERLAY_COLOR)
         surface.blit(overlay, (0, 0))
 
+        center_x = surface.get_width() // 2
         title = self.overlay_font.render("GAME OVER", True, OVERLAY_TEXT_COLOR)
         prompt = self.detail_font.render(
             "PRESS ANY KEY TO RESTART",
@@ -996,10 +1336,93 @@ class Game:
             OVERLAY_TEXT_COLOR,
         )
 
-        title_rect = title.get_rect(center=(surface.get_width() // 2, GAME_OVER_TITLE_Y))
-        prompt_rect = prompt.get_rect(center=(surface.get_width() // 2, GAME_OVER_PROMPT_Y))
+        title_rect = title.get_rect(center=(center_x, GAME_OVER_TITLE_Y))
+        prompt_rect = prompt.get_rect(center=(center_x, GAME_OVER_PROMPT_Y))
         surface.blit(title, title_rect)
         surface.blit(prompt, prompt_rect)
+
+        if not self.high_scores:
+            return
+
+        self._draw_game_over_leaderboard(surface, center_x)
+
+    def _draw_game_over_leaderboard(self, surface: pygame.Surface, center_x: int) -> None:
+        if self._can_scroll_high_scores_up():
+            scroll_up_surface = self.detail_font.render("^", True, OVERLAY_TEXT_COLOR)
+            surface.blit(
+                scroll_up_surface,
+                scroll_up_surface.get_rect(center=(center_x, GAME_OVER_LEADERBOARD_SCROLL_UP_Y)),
+            )
+
+        if self._can_scroll_high_scores_down():
+            scroll_down_surface = self.detail_font.render("v", True, OVERLAY_TEXT_COLOR)
+            surface.blit(
+                scroll_down_surface,
+                scroll_down_surface.get_rect(center=(center_x, GAME_OVER_LEADERBOARD_SCROLL_DOWN_Y)),
+            )
+
+        header_surface = self.detail_font.render("# | INI | LVL | SCORE", True, GAME_OVER_LEADERBOARD_HEADER_COLOR)
+        surface.blit(
+            header_surface,
+            header_surface.get_rect(center=(center_x, GAME_OVER_LEADERBOARD_HEADER_Y)),
+        )
+
+        start_rank = 1 if self.high_score_scroll_offset == 0 else 6
+        for row_index, entry in enumerate(self._visible_high_score_entries()):
+            rank = start_rank + row_index
+            row_y = GAME_OVER_LEADERBOARD_FIRST_ROW_Y + (row_index * GAME_OVER_LEADERBOARD_ROW_HEIGHT)
+            is_recent_entry = self.high_score_recent_entry == entry
+            row_color = DRINK_SCENE_CONTINUE_BONUS_COLOR if is_recent_entry else OVERLAY_TEXT_COLOR
+            rank_surface = self.detail_font.render(f"{rank:>2}", True, GAME_OVER_LEADERBOARD_RANK_COLOR)
+            row_text = f"{entry.initials:>3} {entry.level:>4} {entry.score:>7,}"
+            row_surface = self.detail_font.render(row_text, True, row_color)
+            rank_right = center_x - 54
+            row_left = center_x - 42
+            surface.blit(rank_surface, rank_surface.get_rect(midright=(rank_right, row_y)))
+            surface.blit(row_surface, row_surface.get_rect(midleft=(row_left, row_y)))
+
+    def _draw_high_score_entry_overlay(self, surface: pygame.Surface) -> None:
+        overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        overlay.fill(GAME_OVER_OVERLAY_COLOR)
+        surface.blit(overlay, (0, 0))
+
+        center_x = surface.get_width() // 2
+        is_invalid = self.high_score_invalid_flash_timer > 0.0
+        entry_color = HIGH_SCORE_ENTRY_INVALID_COLOR if is_invalid else OVERLAY_TEXT_COLOR
+        title = self.overlay_font.render("NEW HIGH SCORE!", True, entry_color)
+        score_text = self.detail_font.render(
+            f"SCORE {self.score:06d}   LEVEL {self.current_level:02d}",
+            True,
+            entry_color,
+        )
+        prompt = self.detail_font.render("ENTER YOUR INITIALS", True, entry_color)
+        confirm = self.detail_font.render("PRESS ENTER TO SUBMIT", True, entry_color)
+
+        surface.blit(title, title.get_rect(center=(center_x, HIGH_SCORE_ENTRY_TITLE_Y)))
+        surface.blit(score_text, score_text.get_rect(center=(center_x, HIGH_SCORE_ENTRY_SCORE_Y)))
+
+        cursor_visible = ((pygame.time.get_ticks() // HIGH_SCORE_ENTRY_CURSOR_BLINK_MS) % 2) == 0
+        slot_start_x = center_x - HIGH_SCORE_ENTRY_SLOT_SPACING
+        for index, letter_index in enumerate(self.high_score_initials):
+            slot_center_x = slot_start_x + (index * HIGH_SCORE_ENTRY_SLOT_SPACING)
+            letter_surface = self.high_score_entry_font.render(
+                chr(ord("A") + letter_index),
+                True,
+                entry_color,
+            )
+            surface.blit(
+                letter_surface,
+                letter_surface.get_rect(center=(slot_center_x, HIGH_SCORE_ENTRY_LETTERS_Y)),
+            )
+            if index == self.high_score_cursor and cursor_visible:
+                underscore_surface = self.detail_font.render("_", True, entry_color)
+                surface.blit(
+                    underscore_surface,
+                    underscore_surface.get_rect(center=(slot_center_x, HIGH_SCORE_ENTRY_UNDERSCORE_Y)),
+                )
+
+        surface.blit(prompt, prompt.get_rect(center=(center_x, HIGH_SCORE_ENTRY_PROMPT_Y)))
+        surface.blit(confirm, confirm.get_rect(center=(center_x, HIGH_SCORE_ENTRY_CONFIRM_Y)))
 
     def _draw_level_clear_drink_scene(self, surface: pygame.Surface) -> None:
         summary = self.drink_scene_summary
@@ -1187,6 +1610,14 @@ class Game:
 
     def _draw_drink_scene_bartender(self, surface: pygame.Surface, center_x: int) -> None:
         body_rect = self._drink_scene_bartender_body_rect(center_x)
+        shirt_color = self._resolve_cosmetic_color("shirt", DRINK_SCENE_BARTENDER_SHIRT_COLOR)
+        apron_color = self._resolve_cosmetic_color("apron", DRINK_SCENE_BARTENDER_APRON_COLOR)
+        hat_color = self._resolve_cosmetic_color("hat", DRINK_SCENE_BARTENDER_HAT_COLOR)
+        hat_brim_color = self._resolve_cosmetic_color("hat_brim", DRINK_SCENE_BARTENDER_HAT_COLOR)
+        bowtie_color = self._resolve_cosmetic_color("bowtie", DRINK_SCENE_BARTENDER_BOWTIE_COLOR)
+        glasses_color = self._resolve_cosmetic_color("glasses", DRINK_SCENE_BARTENDER_GLASSES_COLOR)
+        cigar_color = self._resolve_cosmetic_color("cigar", DRINK_SCENE_BARTENDER_CIGAR_COLOR)
+        cigar_ember_color = self._resolve_cosmetic_color("cigar_ember", DRINK_SCENE_BARTENDER_CIGAR_EMBER_COLOR)
         head_rect = pygame.Rect(
             body_rect.centerx - (DRINK_SCENE_BARTENDER_HEAD_SIZE // 2),
             body_rect.top - DRINK_SCENE_BARTENDER_HEAD_SIZE + DRINK_SCENE_BARTENDER_HEAD_Y_OFFSET,
@@ -1236,40 +1667,41 @@ class Game:
             DRINK_SCENE_BARTENDER_HAND_SIZE,
         )
 
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SHIRT_COLOR, body_rect)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SHIRT_COLOR, left_arm_rect)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SHIRT_COLOR, right_arm_rect)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SHIRT_COLOR, left_leg_rect)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SHIRT_COLOR, right_leg_rect)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_APRON_COLOR, apron_rect)
+        pygame.draw.rect(surface, shirt_color, body_rect)
+        pygame.draw.rect(surface, shirt_color, left_arm_rect)
+        pygame.draw.rect(surface, shirt_color, right_arm_rect)
+        pygame.draw.rect(surface, shirt_color, left_leg_rect)
+        pygame.draw.rect(surface, shirt_color, right_leg_rect)
+        pygame.draw.rect(surface, apron_color, apron_rect)
         if self.round_bartender_has_bowtie or self.run_bartender_has_bowtie:
-            self._draw_drink_scene_bartender_bowtie(surface, body_rect)
+            self._draw_drink_scene_bartender_bowtie(surface, body_rect, bowtie_color)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SKIN_COLOR, head_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SKIN_COLOR, left_hand_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SKIN_COLOR, right_hand_rect)
         if self.round_bartender_has_glasses or self.run_bartender_has_glasses:
-            self._draw_drink_scene_bartender_glasses(surface, head_rect)
+            self._draw_drink_scene_bartender_glasses(surface, head_rect, glasses_color)
         if self.round_bartender_has_cigar or self.run_bartender_has_cigar:
-            self._draw_drink_scene_bartender_cigar(surface, head_rect)
+            self._draw_drink_scene_bartender_cigar(surface, head_rect, cigar_color, cigar_ember_color)
 
         if self.drink_scene_active_index is not None:
             active_mug_rect, _ = self._drink_scene_slot_geometry(center_x, self.drink_scene_active_index, body_rect)
-            self._draw_drink_scene_reach(surface, body_rect, active_mug_rect)
+            self._draw_drink_scene_reach(surface, body_rect, active_mug_rect, shirt_color)
 
         if self.round_bartender_has_hat or self.run_bartender_has_hat:
-            self._draw_drink_scene_bartender_hat(surface, head_rect)
+            self._draw_drink_scene_bartender_hat(surface, head_rect, hat_color, hat_brim_color)
 
     def _draw_drink_scene_reach(
         self,
         surface: pygame.Surface,
         body_rect: pygame.Rect,
         target_rect: pygame.Rect,
+        shirt_color: pygame.Color,
     ) -> None:
         shoulder_x = body_rect.left + DRINK_SCENE_REACH_SHOULDER_X_OFFSET
         shoulder_y = body_rect.top + DRINK_SCENE_REACH_SHOULDER_Y_OFFSET
         pygame.draw.line(
             surface,
-            DRINK_SCENE_BARTENDER_SHIRT_COLOR,
+            shirt_color,
             (shoulder_x, shoulder_y),
             self._drink_scene_grab_hand_rect(target_rect).center,
             DRINK_SCENE_BARTENDER_ARM_WIDTH,
@@ -1279,7 +1711,13 @@ class Game:
         hand_rect = self._drink_scene_grab_hand_rect(target_rect)
         pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_SKIN_COLOR, hand_rect)
 
-    def _draw_drink_scene_bartender_hat(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
+    def _draw_drink_scene_bartender_hat(
+        self,
+        surface: pygame.Surface,
+        head_rect: pygame.Rect,
+        hat_color: pygame.Color,
+        hat_brim_color: pygame.Color,
+    ) -> None:
         brim_rect = pygame.Rect(
             head_rect.centerx - (DRINK_SCENE_BARTENDER_HAT_WIDTH // 2),
             head_rect.top + DRINK_SCENE_BARTENDER_HAT_Y_OFFSET,
@@ -1292,10 +1730,15 @@ class Game:
             brim_rect.width - (DRINK_SCENE_BARTENDER_HAT_CROWN_INSET * 2),
             DRINK_SCENE_BARTENDER_HAT_HEIGHT,
         )
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_HAT_COLOR, crown_rect)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_HAT_COLOR, brim_rect)
+        pygame.draw.rect(surface, hat_color, crown_rect)
+        pygame.draw.rect(surface, hat_brim_color, brim_rect)
 
-    def _draw_drink_scene_bartender_bowtie(self, surface: pygame.Surface, body_rect: pygame.Rect) -> None:
+    def _draw_drink_scene_bartender_bowtie(
+        self,
+        surface: pygame.Surface,
+        body_rect: pygame.Rect,
+        bowtie_color: pygame.Color,
+    ) -> None:
         center_x = body_rect.centerx
         center_y = body_rect.top + DRINK_SCENE_BARTENDER_BOWTIE_Y
         left_points = [
@@ -1314,11 +1757,16 @@ class Game:
             DRINK_SCENE_BARTENDER_BOWTIE_CENTER,
             DRINK_SCENE_BARTENDER_BOWTIE_CENTER,
         )
-        pygame.draw.polygon(surface, DRINK_SCENE_BARTENDER_BOWTIE_COLOR, left_points)
-        pygame.draw.polygon(surface, DRINK_SCENE_BARTENDER_BOWTIE_COLOR, right_points)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_BOWTIE_COLOR, center_rect)
+        pygame.draw.polygon(surface, bowtie_color, left_points)
+        pygame.draw.polygon(surface, bowtie_color, right_points)
+        pygame.draw.rect(surface, bowtie_color, center_rect)
 
-    def _draw_drink_scene_bartender_glasses(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
+    def _draw_drink_scene_bartender_glasses(
+        self,
+        surface: pygame.Surface,
+        head_rect: pygame.Rect,
+        glasses_color: pygame.Color,
+    ) -> None:
         total_bridge_width = DRINK_SCENE_BARTENDER_GLASSES_BRIDGE * 2
         lens_width = (DRINK_SCENE_BARTENDER_GLASSES_WIDTH - total_bridge_width) // 2
         lens_top = head_rect.top + DRINK_SCENE_BARTENDER_GLASSES_Y_OFFSET
@@ -1340,11 +1788,17 @@ class Game:
             right_lens_rect.left - left_lens_rect.right,
             2,
         )
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_GLASSES_COLOR, left_lens_rect, 1)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_GLASSES_COLOR, right_lens_rect, 1)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_GLASSES_COLOR, bridge_rect)
+        pygame.draw.rect(surface, glasses_color, left_lens_rect, 1)
+        pygame.draw.rect(surface, glasses_color, right_lens_rect, 1)
+        pygame.draw.rect(surface, glasses_color, bridge_rect)
 
-    def _draw_drink_scene_bartender_cigar(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
+    def _draw_drink_scene_bartender_cigar(
+        self,
+        surface: pygame.Surface,
+        head_rect: pygame.Rect,
+        cigar_color: pygame.Color,
+        cigar_ember_color: pygame.Color,
+    ) -> None:
         cigar_rect = pygame.Rect(
             head_rect.centerx - DRINK_SCENE_BARTENDER_CIGAR_X_OFFSET - DRINK_SCENE_BARTENDER_CIGAR_WIDTH,
             head_rect.top + DRINK_SCENE_BARTENDER_CIGAR_Y_OFFSET,
@@ -1357,8 +1811,8 @@ class Game:
             2,
             cigar_rect.height,
         )
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_CIGAR_COLOR, cigar_rect)
-        pygame.draw.rect(surface, DRINK_SCENE_BARTENDER_CIGAR_EMBER_COLOR, ember_rect)
+        pygame.draw.rect(surface, cigar_color, cigar_rect)
+        pygame.draw.rect(surface, cigar_ember_color, ember_rect)
 
     def _draw_drink_scene_slots(self, surface: pygame.Surface, center_x: int) -> None:
         if not self.drink_scene_slots:
@@ -1444,7 +1898,10 @@ class Game:
         if self.pending_game_over:
             self.fail_message = None
             self.pending_game_over = False
-            self.flow_state = FlowState.GAME_OVER
+            if self._qualifies_for_high_scores(self.score, self.current_level):
+                self._begin_high_score_entry()
+            else:
+                self.flow_state = FlowState.GAME_OVER
             return
 
         self._reset_level_progress()
@@ -1632,6 +2089,20 @@ class Game:
             self.round_bartender_has_cigar = True
             self.active_round_beer_theme = GREEN_BEER_THEME_ID
             self.first_round_cosmetic_test_pending = False
+        self.bartender.shirt_color = self._resolve_cosmetic_color("shirt", BARTENDER_BODY_COLOR)
+        self.bartender.apron_color = self._resolve_cosmetic_color("apron", BARTENDER_APRON_COLOR)
+        self.bartender.hat_color = self._resolve_cosmetic_color("hat", BARTENDER_HAT_COLOR)
+        self.bartender.hat_brim_color = self._resolve_cosmetic_color(
+            "hat_brim",
+            BARTENDER_HAT_BRIM_COLOR,
+        )
+        self.bartender.bowtie_color = self._resolve_cosmetic_color("bowtie", BARTENDER_BOWTIE_COLOR)
+        self.bartender.glasses_color = self._resolve_cosmetic_color("glasses", BARTENDER_GLASSES_COLOR)
+        self.bartender.cigar_color = self._resolve_cosmetic_color("cigar", BARTENDER_CIGAR_COLOR)
+        self.bartender.cigar_ember_color = self._resolve_cosmetic_color(
+            "cigar_ember",
+            BARTENDER_CIGAR_EMBER_COLOR,
+        )
 
     def _build_drink_scene_slots(self) -> list[DrinkSceneSlot]:
         return [
@@ -1765,6 +2236,12 @@ class Game:
 
     def _effective_tip_cash_reward(self) -> float:
         return TIP_CASH + self.active_round_bigger_tips_cash_bonus
+
+    def _resolve_cosmetic_color(self, element: str, default: pygame.Color) -> pygame.Color:
+        if self.active_round_beer_theme and self.active_round_beer_theme in THEME_PALETTES:
+            palette = THEME_PALETTES[self.active_round_beer_theme]
+            return palette.get(element, default)
+        return default
 
     def _active_beer_fill_color(self) -> pygame.Color | None:
         if self.active_round_beer_theme == GREEN_BEER_THEME_ID:
