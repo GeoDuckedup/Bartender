@@ -706,6 +706,8 @@ class Game:
         return int(time.time())
 
     def _load_high_scores(self) -> list[HighScoreEntry]:
+        if sys.platform == "emscripten":
+            return []
         try:
             raw_payload = json.loads(HIGH_SCORE_FILE_PATH.read_text(encoding="utf-8"))
         except (FileNotFoundError, json.JSONDecodeError, OSError):
@@ -724,6 +726,8 @@ class Game:
         return self._sort_high_scores(entries)
 
     def _save_high_scores(self) -> None:
+        if sys.platform == "emscripten":
+            return
         serialized_entries = [entry.to_dict() for entry in self.high_scores]
         try:
             HIGH_SCORE_FILE_PATH.write_text(

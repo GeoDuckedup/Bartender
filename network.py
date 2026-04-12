@@ -49,22 +49,26 @@ async def _browser_json_request(
     method: str = "GET",
     body: dict[str, Any] | None = None,
 ) -> tuple[bool, Any]:
-    import platform
-    from pyodide.ffi import to_js
+    from pyodide.http import pyfetch
 
-    request_options: dict[str, Any] = {
-        "method": method,
-    }
+    request_options: dict[str, Any] = {"method": method}
     if body is not None:
         request_options["headers"] = {"Content-Type": "application/json"}
         request_options["body"] = json.dumps(body)
 
-    response = await platform.window.fetch(url, to_js(request_options))
+    response = await pyfetch(url, **request_options)
     try:
-        raw_text = await response.text()
+        raw_text = await response.string()
         payload = json.loads(raw_text) if raw_text else None
-    except Exception:
+    except Exception as error:
+        print(f"[network] Failed to parse browser response from {url}: {error}")
         payload = None
+        raw_text = ""
+    if not response.ok:
+        print(
+            f"[network] Browser request failed: {method} {url} "
+            f"status={response.status} body={raw_text[:200]}"
+        )
     return (response.ok, payload)
 
 
@@ -107,7 +111,8 @@ async def _json_request(
 async def fetch_leaderboard() -> list[dict[str, Any]]:
     try:
         ok, payload = await _json_request(_leaderboard_url())
-    except Exception:
+    except Exception as error:
+        print(f"[network] Leaderboard fetch exception: {error}")
         return []
     if not ok:
         return []
@@ -127,6 +132,7 @@ async def submit_score(initials: str, score: int, level: int) -> bool:
             method="POST",
             body=payload,
         )
-    except Exception:
+    except Exception as error:
+        print(f"[network] Score submit exception: {error}")
         return False
     return ok
