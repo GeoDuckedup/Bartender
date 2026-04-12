@@ -539,6 +539,29 @@ frameborder="1"
 
         window.hideSplashArt = hideSplashArt
 
+        const needsVerticalKeyBridge = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+        window.codexInputBridge = window.codexInputBridge || { queue: [] }
+
+        const bridgeVerticalKey = (event) => {
+            if (!needsVerticalKeyBridge || event.repeat) {
+                return
+            }
+            const verticalKeyMap = {
+                ArrowUp: "UP",
+                Up: "UP",
+                ArrowDown: "DOWN",
+                Down: "DOWN",
+                w: "UP",
+                W: "UP",
+                s: "DOWN",
+                S: "DOWN",
+            }
+            const bridgedKey = verticalKeyMap[event.key]
+            if (bridgedKey) {
+                window.codexInputBridge.queue.push(bridgedKey)
+            }
+        }
+
         ;["click", "mousedown", "touchstart"].forEach((eventName) => {
             canvas.addEventListener(
                 eventName,
@@ -565,6 +588,7 @@ frameborder="1"
         window.addEventListener(
             "keydown",
             (event) => {
+                bridgeVerticalKey(event)
                 if (blockedKeys.has(event.key)) {
                     event.preventDefault()
                     focusCanvas()

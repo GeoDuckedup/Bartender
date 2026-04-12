@@ -158,6 +158,7 @@ FOCUS_JS = """        const blockedKeys = new Set([
                 canvas.focus()
             }
         }
+        window.focusCanvas = focusCanvas
 
         const hideSplashArt = () => {
             const splashArt = document.getElementById("splash-art")
@@ -172,6 +173,29 @@ FOCUS_JS = """        const blockedKeys = new Set([
         }
 
         window.hideSplashArt = hideSplashArt
+
+        const needsVerticalKeyBridge = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+        window.codexInputBridge = window.codexInputBridge || { queue: [] }
+
+        const bridgeVerticalKey = (event) => {
+            if (!needsVerticalKeyBridge || event.repeat) {
+                return
+            }
+            const verticalKeyMap = {
+                ArrowUp: "UP",
+                Up: "UP",
+                ArrowDown: "DOWN",
+                Down: "DOWN",
+                w: "UP",
+                W: "UP",
+                s: "DOWN",
+                S: "DOWN",
+            }
+            const bridgedKey = verticalKeyMap[event.key]
+            if (bridgedKey) {
+                window.codexInputBridge.queue.push(bridgedKey)
+            }
+        }
 
         ;["click", "mousedown", "touchstart"].forEach((eventName) => {
             canvas.addEventListener(
@@ -199,6 +223,7 @@ FOCUS_JS = """        const blockedKeys = new Set([
         window.addEventListener(
             "keydown",
             (event) => {
+                bridgeVerticalKey(event)
                 if (blockedKeys.has(event.key)) {
                     event.preventDefault()
                     focusCanvas()
@@ -291,7 +316,7 @@ def patch_index_html(html: str) -> str:
     html = replace_once(
         html,
         "        while not platform.window.MM.UME:\n            await asyncio.sleep(.1)\n",
-        "        while not platform.window.MM.UME:\n            await asyncio.sleep(.1)\n\n        platform.window.document.body.classList.add(\"started\")\n        if hasattr(platform.window, \"hideSplashArt\"):\n            platform.window.hideSplashArt()\n",
+        "        while not platform.window.MM.UME:\n            await asyncio.sleep(.1)\n\n        platform.window.document.body.classList.add(\"started\")\n        if hasattr(platform.window, \"hideSplashArt\"):\n            platform.window.hideSplashArt()\n        if hasattr(platform.window, \"focusCanvas\"):\n            platform.window.focusCanvas()\n",
     )
     html = replace_once(
         html,

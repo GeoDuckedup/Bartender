@@ -883,6 +883,63 @@ class Game:
             return self.high_scores[:5]
         return self.high_scores[5:10]
 
+    def _handle_vertical_navigation(self, direction: int) -> None:
+        if self.flow_state is FlowState.FAILING:
+            return
+
+        if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
+            if direction < 0:
+                self.high_score_initials[self.high_score_cursor] = (
+                    self.high_score_initials[self.high_score_cursor] + 1
+                ) % 26
+            else:
+                self.high_score_initials[self.high_score_cursor] = (
+                    self.high_score_initials[self.high_score_cursor] - 1
+                ) % 26
+            self.high_score_invalid_flash_timer = 0.0
+            return
+
+        if self.flow_state is FlowState.GAME_OVER:
+            if not self.high_scores:
+                return
+            if direction < 0 and self._can_scroll_high_scores_up():
+                self.high_score_scroll_offset = 0
+            elif direction > 0 and self._can_scroll_high_scores_down():
+                self.high_score_scroll_offset = 1
+            return
+
+        if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
+            return
+
+        if self.bartender.is_pouring:
+            self.bartender.cancel_pour()
+
+        if direction < 0:
+            self.bartender.move_up()
+        else:
+            self.bartender.move_down()
+
+    def _consume_browser_input_bridge(self) -> None:
+        if sys.platform != "emscripten":
+            return
+
+        try:
+            import platform
+
+            bridge = getattr(platform.window, "codexInputBridge", None)
+            if bridge is None:
+                return
+            queue = bridge.queue
+        except Exception:
+            return
+
+        while queue.length:
+            token = str(queue.shift())
+            if token == "UP":
+                self._handle_vertical_navigation(-1)
+            elif token == "DOWN":
+                self._handle_vertical_navigation(1)
+
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.flow_state is FlowState.FAILING:
             return
@@ -891,15 +948,9 @@ class Game:
             if event.type != pygame.KEYDOWN:
                 return
             if event.key in (pygame.K_UP, pygame.K_w):
-                self.high_score_initials[self.high_score_cursor] = (
-                    self.high_score_initials[self.high_score_cursor] + 1
-                ) % 26
-                self.high_score_invalid_flash_timer = 0.0
+                self._handle_vertical_navigation(-1)
             elif event.key in (pygame.K_DOWN, pygame.K_s):
-                self.high_score_initials[self.high_score_cursor] = (
-                    self.high_score_initials[self.high_score_cursor] - 1
-                ) % 26
-                self.high_score_invalid_flash_timer = 0.0
+                self._handle_vertical_navigation(1)
             elif event.key in (pygame.K_LEFT, pygame.K_a):
                 self.high_score_cursor = max(0, self.high_score_cursor - 1)
                 self.high_score_invalid_flash_timer = 0.0
@@ -913,10 +964,10 @@ class Game:
         if self.flow_state is FlowState.GAME_OVER:
             if event.type == pygame.KEYDOWN:
                 if self.high_scores and event.key in (pygame.K_UP, pygame.K_DOWN):
-                    if event.key == pygame.K_UP and self._can_scroll_high_scores_up():
-                        self.high_score_scroll_offset = 0
-                    elif event.key == pygame.K_DOWN and self._can_scroll_high_scores_down():
-                        self.high_score_scroll_offset = 1
+                    if event.key == pygame.K_UP:
+                        self._handle_vertical_navigation(-1)
+                    elif event.key == pygame.K_DOWN:
+                        self._handle_vertical_navigation(1)
                     return
                 self._reset_game()
             return
@@ -959,15 +1010,14 @@ class Game:
             pygame.K_w,
             pygame.K_s,
         )
-        if is_arrow and self.bartender.is_pouring:
-            self.bartender.cancel_pour()
-
         if event.key in (pygame.K_UP, pygame.K_w):
-            self.bartender.move_up()
+            self._handle_vertical_navigation(-1)
         elif event.key in (pygame.K_DOWN, pygame.K_s):
-            self.bartender.move_down()
+            self._handle_vertical_navigation(1)
 
     def update(self, dt: float) -> None:
+        self._consume_browser_input_bridge()
+
         if self.flow_state is FlowState.FAILING:
             self.fail_feedback_timer = max(0.0, self.fail_feedback_timer - dt)
             if self.fail_feedback_timer == 0.0:
