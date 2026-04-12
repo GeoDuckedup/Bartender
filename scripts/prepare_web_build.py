@@ -31,13 +31,13 @@ PROMPT_HTML = """<div class="infobox-title">BARTENDER</div>
             <div class="key-cluster">
                 <div class="key-row">
                     <span class="key key-empty"></span>
-                    <span class="key">↑</span>
+                    <span class="key key-arrow">&uarr;</span>
                     <span class="key key-empty"></span>
                 </div>
                 <div class="key-row">
-                    <span class="key">←</span>
-                    <span class="key">↓</span>
-                    <span class="key">→</span>
+                    <span class="key key-arrow">&larr;</span>
+                    <span class="key key-arrow">&darr;</span>
+                    <span class="key key-arrow">&rarr;</span>
                 </div>
             </div>
         </div>
@@ -200,6 +200,13 @@ INFOBOX_BLOCK = """        #infobox {
 
         .key-empty {
             visibility: hidden;
+        }
+
+        .key-arrow {
+            font-size: 15px;
+            line-height: 1;
+            font-family: Georgia, "Times New Roman", serif;
+            transform: translateY(-1px);
         }
 
         .spacebar-key {
