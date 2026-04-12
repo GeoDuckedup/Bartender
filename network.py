@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 FIREBASE_URL = "https://bartender-leaderboard-default-rtdb.firebaseio.com"
 FETCH_TIMEOUT_SECONDS = 8.0
+_BROWSER_FETCH_BRIDGE_READY = False
 
 
 def _leaderboard_url() -> str:
@@ -49,27 +50,72 @@ async def _browser_json_request(
     method: str = "GET",
     body: dict[str, Any] | None = None,
 ) -> tuple[bool, Any]:
-    from pyodide.http import pyfetch
+    import platform
 
-    request_options: dict[str, Any] = {"method": method}
-    if body is not None:
-        request_options["headers"] = {"Content-Type": "application/json"}
-        request_options["body"] = json.dumps(body)
+    global _BROWSER_FETCH_BRIDGE_READY
+    if not _BROWSER_FETCH_BRIDGE_READY:
+        platform.window.eval(
+            """
+if (!window.CodexFetch) {
+    window.CodexFetch = {};
+    window.CodexFetch.GET = function * GET(url) {
+        let content = "__CODEX_FETCH_PENDING__";
+        fetch(new Request(url, { method: "GET" }))
+            .then((resp) => resp.text())
+            .then((resp) => { content = resp; })
+            .catch((err) => {
+                console.log("[network] GET error", err);
+                content = "__CODEX_FETCH_ERROR__";
+            });
+        while (content === "__CODEX_FETCH_PENDING__") {
+            yield;
+        }
+        yield content;
+    };
+    window.CodexFetch.POST = function * POST(url, data) {
+        let content = "__CODEX_FETCH_PENDING__";
+        fetch(new Request(url, {
+            method: "POST",
+            headers: {
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            },
+            body: data
+        }))
+            .then((resp) => resp.text())
+            .then((resp) => { content = resp; })
+            .catch((err) => {
+                console.log("[network] POST error", err);
+                content = "__CODEX_FETCH_ERROR__";
+            });
+        while (content === "__CODEX_FETCH_PENDING__") {
+            yield;
+        }
+        yield content;
+    };
+}
+            """
+        )
+        _BROWSER_FETCH_BRIDGE_READY = True
 
-    response = await pyfetch(url, **request_options)
+    await asyncio.sleep(0)
+    if method == "POST":
+        raw_text = await platform.jsiter(
+            platform.window.CodexFetch.POST(url, json.dumps(body or {})),
+        )
+    else:
+        raw_text = await platform.jsiter(platform.window.CodexFetch.GET(url))
+
+    if raw_text == "__CODEX_FETCH_ERROR__":
+        print(f"[network] Browser request failed: {method} {url}")
+        return (False, None)
+
     try:
-        raw_text = await response.string()
         payload = json.loads(raw_text) if raw_text else None
     except Exception as error:
         print(f"[network] Failed to parse browser response from {url}: {error}")
         payload = None
-        raw_text = ""
-    if not response.ok:
-        print(
-            f"[network] Browser request failed: {method} {url} "
-            f"status={response.status} body={raw_text[:200]}"
-        )
-    return (response.ok, payload)
+    return (True, payload)
 
 
 def _desktop_json_request_sync(
