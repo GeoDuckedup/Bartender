@@ -942,19 +942,29 @@ class Game:
 
         return
 
-    def _consume_browser_input_bridge(self) -> None:
+    def _browser_input_bridge_state(self) -> tuple[object | None, bool, bool, bool]:
         if sys.platform != "emscripten":
-            return
+            return (None, False, False, False)
 
         try:
             import platform
 
             bridge = getattr(platform.window, "codexInputBridge", None)
             if bridge is None:
-                return
-            queue = bridge.queue
+                return (None, False, False, False)
+            force_directional = bool(getattr(bridge, "forceDirectional", False))
+            held_left = bool(getattr(bridge, "heldLeft", False))
+            held_right = bool(getattr(bridge, "heldRight", False))
+            return (bridge, force_directional, held_left, held_right)
         except Exception:
+            return (None, False, False, False)
+
+    def _consume_browser_input_bridge(self) -> None:
+        bridge, _force_directional, _held_left, _held_right = self._browser_input_bridge_state()
+        if bridge is None:
             return
+
+        queue = bridge.queue
 
         while queue.length:
             token = str(queue.shift())
@@ -971,8 +981,17 @@ class Game:
         if self.flow_state is FlowState.FAILING:
             return
 
+        _bridge, force_directional, _held_left, _held_right = self._browser_input_bridge_state()
+
         if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
             if event.type != pygame.KEYDOWN:
+                return
+            if force_directional and event.key in (
+                pygame.K_UP,
+                pygame.K_DOWN,
+                pygame.K_LEFT,
+                pygame.K_RIGHT,
+            ):
                 return
             if event.key in (pygame.K_UP, pygame.K_w):
                 self._handle_vertical_navigation(-1)
@@ -988,6 +1007,8 @@ class Game:
 
         if self.flow_state is FlowState.GAME_OVER:
             if event.type == pygame.KEYDOWN:
+                if force_directional and event.key in (pygame.K_UP, pygame.K_DOWN):
+                    return
                 if self.high_scores and event.key in (pygame.K_UP, pygame.K_DOWN):
                     if event.key == pygame.K_UP:
                         self._handle_vertical_navigation(-1)
@@ -999,6 +1020,8 @@ class Game:
 
         if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
             if event.type == pygame.KEYDOWN:
+                if force_directional and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    return
                 if event.key == pygame.K_SPACE:
                     if self._is_drink_scene_drinking():
                         self.drink_scene_space_held = True
@@ -1035,6 +1058,14 @@ class Game:
             pygame.K_w,
             pygame.K_s,
         )
+        if force_directional and event.key in (
+            pygame.K_UP,
+            pygame.K_DOWN,
+            pygame.K_LEFT,
+            pygame.K_RIGHT,
+        ):
+            return
+
         if event.key in (pygame.K_UP, pygame.K_w):
             self._handle_vertical_navigation(-1)
         elif event.key in (pygame.K_DOWN, pygame.K_s):
@@ -1042,6 +1073,7 @@ class Game:
 
     def update(self, dt: float) -> None:
         self._consume_browser_input_bridge()
+        _bridge, force_directional, bridge_left_held, bridge_right_held = self._browser_input_bridge_state()
 
         if self.flow_state is FlowState.FAILING:
             self.fail_feedback_timer = max(0.0, self.fail_feedback_timer - dt)
@@ -1062,8 +1094,8 @@ class Game:
 
         if not self.bartender.is_pouring:
             pressed = pygame.key.get_pressed()
-            moving_left = pressed[pygame.K_LEFT] or pressed[pygame.K_a]
-            moving_right = pressed[pygame.K_RIGHT] or pressed[pygame.K_d]
+            moving_left = pressed[pygame.K_a] or (bridge_left_held if force_directional else pressed[pygame.K_LEFT])
+            moving_right = pressed[pygame.K_d] or (bridge_right_held if force_directional else pressed[pygame.K_RIGHT])
             if moving_left and not moving_right:
                 self.bartender.walk_left(dt)
             elif moving_right and not moving_left:

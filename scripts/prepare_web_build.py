@@ -295,7 +295,12 @@ FOCUS_JS = """        const blockedKeys = new Set([
         window.hideSplashArt = hideSplashArt
 
         const needsDirectionalKeyBridge = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-        window.codexInputBridge = window.codexInputBridge || { queue: [] }
+        window.codexInputBridge = window.codexInputBridge || {
+            queue: [],
+            forceDirectional: needsDirectionalKeyBridge,
+            heldLeft: false,
+            heldRight: false,
+        }
 
         const bridgeDirectionalKey = (event) => {
             if (!needsDirectionalKeyBridge || event.repeat) {
@@ -310,19 +315,24 @@ FOCUS_JS = """        const blockedKeys = new Set([
                 Left: "LEFT",
                 ArrowRight: "RIGHT",
                 Right: "RIGHT",
-                w: "UP",
-                W: "UP",
-                a: "LEFT",
-                A: "LEFT",
-                s: "DOWN",
-                S: "DOWN",
-                d: "RIGHT",
-                D: "RIGHT",
             }
             const bridgedKey = directionalKeyMap[event.key]
             if (bridgedKey) {
                 window.codexInputBridge.queue.push(bridgedKey)
             }
+        }
+
+        const directionalKeyToken = (event) => {
+            const key = event.key || ""
+            const code = event.code || ""
+            const keyIdentifier = event.keyIdentifier || ""
+            const keyCode = event.keyCode || event.which || 0
+
+            if (code === "ArrowUp" || key === "ArrowUp" || key === "Up" || keyIdentifier === "Up" || keyCode === 38) return "UP"
+            if (code === "ArrowDown" || key === "ArrowDown" || key === "Down" || keyIdentifier === "Down" || keyCode === 40) return "DOWN"
+            if (code === "ArrowLeft" || key === "ArrowLeft" || key === "Left" || keyIdentifier === "Left" || keyCode === 37) return "LEFT"
+            if (code === "ArrowRight" || key === "ArrowRight" || key === "Right" || keyIdentifier === "Right" || keyCode === 39) return "RIGHT"
+            return null
         }
 
         ;["click", "mousedown", "touchstart"].forEach((eventName) => {
@@ -351,7 +361,15 @@ FOCUS_JS = """        const blockedKeys = new Set([
         window.addEventListener(
             "keydown",
             (event) => {
-                bridgeDirectionalKey(event)
+                const directionalToken = directionalKeyToken(event)
+                if (needsDirectionalKeyBridge && directionalToken && !event.repeat) {
+                    window.codexInputBridge.queue.push(directionalToken)
+                    if (directionalToken === "LEFT") {
+                        window.codexInputBridge.heldLeft = true
+                    } else if (directionalToken === "RIGHT") {
+                        window.codexInputBridge.heldRight = true
+                    }
+                }
                 if (blockedKeys.has(event.key)) {
                     event.preventDefault()
                     focusCanvas()
@@ -369,6 +387,14 @@ FOCUS_JS = """        const blockedKeys = new Set([
         window.addEventListener(
             "keyup",
             (event) => {
+                const directionalToken = directionalKeyToken(event)
+                if (needsDirectionalKeyBridge && directionalToken) {
+                    if (directionalToken === "LEFT") {
+                        window.codexInputBridge.heldLeft = false
+                    } else if (directionalToken === "RIGHT") {
+                        window.codexInputBridge.heldRight = false
+                    }
+                }
                 if (blockedKeys.has(event.key)) {
                     event.preventDefault()
                     focusCanvas()
