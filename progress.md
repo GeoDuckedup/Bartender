@@ -6,3 +6,4 @@ Original prompt: Debug the web Firebase leaderboard integration so the browser b
 - Next check: rebuild web export and verify browser fetch/submit against live Firebase.
 - Based on user repro, browser was likely showing stale bundled `high_scores.json` while runtime fetch failed silently.
 - Fix pass: browser no longer loads/saves `high_scores.json`, `high_scores.json` is excluded from pygbag packaging, and `network.py` now logs browser fetch/submit failures to the console.
+- Added a richer pre-start splash control card in the web shell: visual `WASD`, visual arrow-key cluster, and a spacebar-style `POUR BEER` key so the browser start experience explains controls immediately.

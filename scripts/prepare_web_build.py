@@ -10,7 +10,43 @@ TARGET_DIRS = (REPO_ROOT / "docs", REPO_ROOT / "web")
 BOX_ART_SOURCE = REPO_ROOT / "web_assets" / "box-art.png"
 
 PROMPT_HTML = """<div class="infobox-title">BARTENDER</div>
-<div class="infobox-subtitle">SPACEBAR TO START</div>"""
+<div class="infobox-subtitle">PRESS SPACEBAR TO START</div>
+<div class="infobox-controls">
+    <div class="infobox-action">
+        <div class="infobox-action-label">MOVE</div>
+        <div class="infobox-keyboards">
+            <div class="key-cluster">
+                <div class="key-row">
+                    <span class="key key-empty"></span>
+                    <span class="key">W</span>
+                    <span class="key key-empty"></span>
+                </div>
+                <div class="key-row">
+                    <span class="key">A</span>
+                    <span class="key">S</span>
+                    <span class="key">D</span>
+                </div>
+            </div>
+            <div class="infobox-or">OR</div>
+            <div class="key-cluster">
+                <div class="key-row">
+                    <span class="key key-empty"></span>
+                    <span class="key">↑</span>
+                    <span class="key key-empty"></span>
+                </div>
+                <div class="key-row">
+                    <span class="key">←</span>
+                    <span class="key">↓</span>
+                    <span class="key">→</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="infobox-action">
+        <div class="infobox-action-label">POUR BEER</div>
+        <div class="spacebar-key">SPACEBAR</div>
+    </div>
+</div>"""
 
 LOADING_HTML = """<div class="infobox-title">BARTENDER</div>
 <div class="infobox-subtitle">LOADING</div>
@@ -75,7 +111,7 @@ INFOBOX_BLOCK = """        #infobox {
             background: rgba(154, 85, 30, 0.74);
             color: #ffe9bf;
             font-weight: bold;
-            padding: 8px 18px 10px;
+            padding: 10px 18px 14px;
             border: 4px solid #d66b2c;
             border-radius: 14px;
             box-shadow: 0 0 0 6px rgba(30, 15, 9, 0.92);
@@ -83,8 +119,8 @@ INFOBOX_BLOCK = """        #infobox {
             text-transform: uppercase;
             letter-spacing: 0.12em;
             text-align: center;
-            min-width: 280px;
-            max-width: 340px;
+            min-width: 340px;
+            max-width: 420px;
             height: auto;
         }
 
@@ -101,7 +137,84 @@ INFOBOX_BLOCK = """        #infobox {
             font-size: 12px;
             line-height: 1.2;
             color: #f6ddb0;
-            margin-bottom: 0;
+            margin-bottom: 10px;
+        }
+
+        .infobox-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .infobox-action {
+            width: 100%;
+        }
+
+        .infobox-action-label {
+            font-size: 11px;
+            color: #f6ddb0;
+            margin-bottom: 6px;
+            letter-spacing: 0.16em;
+        }
+
+        .infobox-keyboards {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .infobox-or {
+            font-size: 10px;
+            color: #f6ddb0;
+            opacity: 0.85;
+        }
+
+        .key-cluster {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .key-row {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .key {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 24px;
+            border-radius: 6px;
+            border: 2px solid #d66b2c;
+            background: rgba(30, 15, 9, 0.82);
+            color: #ffe9bf;
+            box-shadow: inset 0 -2px 0 rgba(214, 107, 44, 0.28);
+            font-size: 11px;
+            line-height: 1;
+        }
+
+        .key-empty {
+            visibility: hidden;
+        }
+
+        .spacebar-key {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 180px;
+            height: 24px;
+            border-radius: 999px;
+            border: 2px solid #d66b2c;
+            background: rgba(30, 15, 9, 0.82);
+            color: #ffe9bf;
+            box-shadow: inset 0 -2px 0 rgba(214, 107, 44, 0.28);
+            font-size: 11px;
+            line-height: 1;
         }
 """
 
