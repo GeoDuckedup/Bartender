@@ -1015,7 +1015,8 @@ class Game:
                     elif event.key == pygame.K_DOWN:
                         self._handle_vertical_navigation(1)
                     return
-                self._reset_game()
+                if event.key == pygame.K_SPACE:
+                    self._reset_game()
             return
 
         if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
@@ -1443,7 +1444,7 @@ class Game:
         center_x = surface.get_width() // 2
         title = self.overlay_font.render("GAME OVER", True, OVERLAY_TEXT_COLOR)
         prompt = self.detail_font.render(
-            "PRESS ANY KEY TO RESTART",
+            "PRESS SPACEBAR FOR NEW GAME",
             True,
             OVERLAY_TEXT_COLOR,
         )
