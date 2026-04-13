@@ -39,6 +39,7 @@ BARTENDER_HAT_BRIM_HEIGHT = 3
 BARTENDER_HAT_CROWN_INSET = 4
 BARTENDER_HAT_Y_OFFSET = 2
 BARTENDER_HAT_COLOR = pygame.Color("#2E2B25")
+BARTENDER_HAT_BRIM_COLOR = BARTENDER_HAT_COLOR
 BARTENDER_BOWTIE_WIDTH = 12
 BARTENDER_BOWTIE_HEIGHT = 6
 BARTENDER_BOWTIE_CENTER_SIZE = 4
@@ -113,6 +114,14 @@ class Bartender:
         self.has_bowtie = False
         self.has_glasses = False
         self.has_cigar = False
+        self.shirt_color = BARTENDER_BODY_COLOR
+        self.apron_color = BARTENDER_APRON_COLOR
+        self.hat_color = BARTENDER_HAT_COLOR
+        self.hat_brim_color = BARTENDER_HAT_BRIM_COLOR
+        self.bowtie_color = BARTENDER_BOWTIE_COLOR
+        self.glasses_color = BARTENDER_GLASSES_COLOR
+        self.cigar_color = BARTENDER_CIGAR_COLOR
+        self.cigar_ember_color = BARTENDER_CIGAR_EMBER_COLOR
         self.pour_state = PourState.IDLE
         self.serve_visual_timer = 0.0
         self.serve_visual_bar_index = 0
@@ -347,8 +356,8 @@ class Bartender:
             self.APRON_HEIGHT,
         )
 
-        pygame.draw.rect(surface, BARTENDER_BODY_COLOR, body_rect)
-        pygame.draw.rect(surface, BARTENDER_APRON_COLOR, apron_rect)
+        pygame.draw.rect(surface, self.shirt_color, body_rect)
+        pygame.draw.rect(surface, self.apron_color, apron_rect)
         if self.has_bowtie:
             self._draw_bowtie(surface, body_rect)
         pygame.draw.rect(surface, BARTENDER_HEAD_COLOR, head_rect)
@@ -398,8 +407,8 @@ class Bartender:
             brim_rect.width - (BARTENDER_HAT_CROWN_INSET * 2),
             BARTENDER_HAT_HEIGHT,
         )
-        pygame.draw.rect(surface, BARTENDER_HAT_COLOR, crown_rect)
-        pygame.draw.rect(surface, BARTENDER_HAT_COLOR, brim_rect)
+        pygame.draw.rect(surface, self.hat_color, crown_rect)
+        pygame.draw.rect(surface, self.hat_brim_color, brim_rect)
 
     def _draw_bowtie(self, surface: pygame.Surface, body_rect: pygame.Rect) -> None:
         center_y = body_rect.top + BARTENDER_BOWTIE_Y_OFFSET
@@ -420,9 +429,9 @@ class Bartender:
             BARTENDER_BOWTIE_CENTER_SIZE,
             BARTENDER_BOWTIE_HEIGHT,
         )
-        pygame.draw.polygon(surface, BARTENDER_BOWTIE_COLOR, left_wing)
-        pygame.draw.polygon(surface, BARTENDER_BOWTIE_COLOR, right_wing)
-        pygame.draw.rect(surface, BARTENDER_BOWTIE_COLOR, center_rect)
+        pygame.draw.polygon(surface, self.bowtie_color, left_wing)
+        pygame.draw.polygon(surface, self.bowtie_color, right_wing)
+        pygame.draw.rect(surface, self.bowtie_color, center_rect)
 
     def _draw_glasses(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
         total_bridge_width = (BARTENDER_GLASSES_BRIDGE * 2)
@@ -446,25 +455,25 @@ class Bartender:
             right_lens_rect.left - left_lens_rect.right,
             2,
         )
-        pygame.draw.rect(surface, BARTENDER_GLASSES_COLOR, left_lens_rect, 1)
-        pygame.draw.rect(surface, BARTENDER_GLASSES_COLOR, right_lens_rect, 1)
-        pygame.draw.rect(surface, BARTENDER_GLASSES_COLOR, bridge_rect)
+        pygame.draw.rect(surface, self.glasses_color, left_lens_rect, 1)
+        pygame.draw.rect(surface, self.glasses_color, right_lens_rect, 1)
+        pygame.draw.rect(surface, self.glasses_color, bridge_rect)
 
     def _draw_cigar(self, surface: pygame.Surface, head_rect: pygame.Rect) -> None:
         cigar_rect = pygame.Rect(
-            head_rect.centerx + BARTENDER_CIGAR_X_OFFSET,
+            head_rect.centerx - BARTENDER_CIGAR_X_OFFSET - BARTENDER_CIGAR_WIDTH,
             head_rect.top + BARTENDER_CIGAR_Y_OFFSET,
             BARTENDER_CIGAR_WIDTH,
             BARTENDER_CIGAR_HEIGHT,
         )
         ember_rect = pygame.Rect(
-            cigar_rect.right - 2,
+            cigar_rect.left,
             cigar_rect.top,
             2,
             cigar_rect.height,
         )
-        pygame.draw.rect(surface, BARTENDER_CIGAR_COLOR, cigar_rect)
-        pygame.draw.rect(surface, BARTENDER_CIGAR_EMBER_COLOR, ember_rect)
+        pygame.draw.rect(surface, self.cigar_color, cigar_rect)
+        pygame.draw.rect(surface, self.cigar_ember_color, ember_rect)
 
     def _serve_elapsed_fraction(self) -> float:
         if self.SERVE_VISUAL_DURATION <= 0.0:
