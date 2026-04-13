@@ -21,3 +21,9 @@ Original prompt: Debug the web Firebase leaderboard integration so the browser b
 - R1 cleanup pass: refactored the `game.py` input hotspot by extracting per-flow-state handlers (`_handle_high_score_entry_event`, `_handle_game_over_event`, `_handle_drink_scene_event`, `_handle_gameplay_event`) and centralizing shared key-group constants.
 - This pass is intended to be behavior-preserving only; `py_compile` passed after the extraction.
 - Natural R2 target: continue the cleanup by separating leaderboard/high-score state transitions from the rest of `Game`, or do the same style of helper extraction for the level-clear drink scene build/draw logic.
+- R2 cleanup pass completed on the drink scene side of `game.py`: extracted shared drink-scene state transitions (`_reset_drink_scene_state`, `_open_drink_scene`, `_begin_drink_scene_drink`), selection helpers, slot text/highlight helpers, and split the drink update path into active-drink vs return/complete helpers.
+- This pass is also intended to be behavior-preserving only; `py_compile` passed after the extraction.
+- Natural R3 target: clean up the leaderboard/high-score lifecycle with the same style of helper extraction, especially around qualification, entry, submit/refresh, and game-over presentation.
+- R3 cleanup pass completed on the leaderboard/high-score lifecycle in `game.py`: extracted shared helpers for setting/appending leaderboard data, priming initials-entry state, opening game-over vs high-score-entry flow, building submitted entries, scroll updates, active-letter adjustments, and cursor movement.
+- This pass is intended to be behavior-preserving only; `py_compile` passed after the extraction.
+- The recent cleanup arc is now: input flow (`R1`), drink-scene state flow (`R2`), and leaderboard/high-score lifecycle (`R3`). A future `R4` would likely be either draw-layer cleanup or splitting `Game` into smaller modules if we decide the file is still too centralized.

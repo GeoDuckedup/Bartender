@@ -748,6 +748,13 @@ class Game:
         except OSError:
             return
 
+    def _set_high_scores(self, entries: list[HighScoreEntry]) -> None:
+        self.high_scores = self._sort_high_scores(entries)
+        self._save_high_scores()
+
+    def _append_high_score(self, entry: HighScoreEntry) -> None:
+        self._set_high_scores(self.high_scores + [entry])
+
     def _qualifies_for_high_scores(self, score: int, level: int) -> bool:
         if len(self.high_scores) < HIGH_SCORE_LEADERBOARD_SIZE:
             return True
@@ -767,8 +774,7 @@ class Game:
             level=level,
             timestamp=timestamp if timestamp is not None else self._default_high_score_entry_timestamp(),
         )
-        self.high_scores = self._sort_high_scores(self.high_scores + [entry])
-        self._save_high_scores()
+        self._append_high_score(entry)
         return entry
 
     def _start_background_task(self, coroutine: object) -> None:
@@ -816,13 +822,11 @@ class Game:
                 entry = self._entry_from_network_payload(entry_payload)
                 if entry is not None:
                     fetched_entries.append(entry)
-            self.high_scores = self._sort_high_scores(fetched_entries)
-            self._save_high_scores()
+            self._set_high_scores(fetched_entries)
             return
 
         if optimistic_entry is not None:
-            self.high_scores = self._sort_high_scores(self.high_scores + [optimistic_entry])
-            self._save_high_scores()
+            self._append_high_score(optimistic_entry)
 
     def _schedule_leaderboard_refresh(
         self,
@@ -846,40 +850,47 @@ class Game:
 
     def _reset_high_score_entry_state(self) -> None:
         self.high_score_entry_active = False
+        self._prime_high_score_entry_state()
+        self.high_score_scroll_offset = 0
+        self.high_score_recent_entry = None
+
+    def _prime_high_score_entry_state(self) -> None:
         self.high_score_initials = [0] * HIGH_SCORE_INITIALS_LENGTH
         self.high_score_cursor = 0
         self.high_score_invalid_flash_timer = 0.0
-        self.high_score_scroll_offset = 0
-        self.high_score_recent_entry = None
 
     def _current_high_score_initials_text(self) -> str:
         return "".join(chr(ord("A") + index) for index in self.high_score_initials)
 
+    def _show_game_over(self) -> None:
+        self.high_score_entry_active = False
+        self.flow_state = FlowState.GAME_OVER
+
     def _begin_high_score_entry(self) -> None:
         self.high_score_entry_active = True
-        self.high_score_initials = [0] * HIGH_SCORE_INITIALS_LENGTH
-        self.high_score_cursor = 0
-        self.high_score_invalid_flash_timer = 0.0
+        self._prime_high_score_entry_state()
         self.high_score_recent_entry = None
         self.flow_state = FlowState.HIGH_SCORE_ENTRY
 
     def _trigger_high_score_invalid_flash(self) -> None:
         self.high_score_invalid_flash_timer = HIGH_SCORE_ENTRY_INVALID_FLASH_DURATION
 
-    def _submit_high_score_entry(self) -> None:
-        initials = self._current_high_score_initials_text()
-        if initials in BLOCKED_INITIALS:
-            self._trigger_high_score_invalid_flash()
-            return
-        self.high_score_recent_entry = HighScoreEntry(
+    def _build_high_score_entry(self, initials: str) -> HighScoreEntry:
+        return HighScoreEntry(
             initials,
             self.score,
             self.current_level,
             self._default_high_score_entry_timestamp(),
         )
+
+    def _submit_high_score_entry(self) -> None:
+        initials = self._current_high_score_initials_text()
+        if initials in BLOCKED_INITIALS:
+            self._trigger_high_score_invalid_flash()
+            return
+        self.high_score_recent_entry = self._build_high_score_entry(initials)
         self.high_score_invalid_flash_timer = 0.0
-        self.high_score_entry_active = False
-        self.flow_state = FlowState.GAME_OVER
+        self._show_game_over()
         self._start_background_task(self._submit_score_task(self.high_score_recent_entry))
 
     def _can_scroll_high_scores_down(self) -> bool:
@@ -893,29 +904,45 @@ class Game:
             return self.high_scores[:5]
         return self.high_scores[5:10]
 
+    def _update_high_score_scroll(self, direction: int) -> None:
+        if not self.high_scores:
+            return
+        if direction < 0 and self._can_scroll_high_scores_up():
+            self.high_score_scroll_offset = 0
+        elif direction > 0 and self._can_scroll_high_scores_down():
+            self.high_score_scroll_offset = 1
+
+    def _adjust_active_high_score_letter(self, direction: int) -> None:
+        current_value = self.high_score_initials[self.high_score_cursor]
+        if direction < 0:
+            self.high_score_initials[self.high_score_cursor] = (current_value + 1) % 26
+        else:
+            self.high_score_initials[self.high_score_cursor] = (current_value - 1) % 26
+        self.high_score_invalid_flash_timer = 0.0
+
+    def _move_high_score_cursor(self, direction: int) -> None:
+        if direction < 0:
+            self.high_score_cursor = max(0, self.high_score_cursor - 1)
+        else:
+            self.high_score_cursor = min(HIGH_SCORE_INITIALS_LENGTH - 1, self.high_score_cursor + 1)
+        self.high_score_invalid_flash_timer = 0.0
+
+    def _enter_post_fail_state(self) -> None:
+        if self._qualifies_for_high_scores(self.score, self.current_level):
+            self._begin_high_score_entry()
+        else:
+            self._show_game_over()
+
     def _handle_vertical_navigation(self, direction: int) -> None:
         if self.flow_state is FlowState.FAILING:
             return
 
         if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
-            if direction < 0:
-                self.high_score_initials[self.high_score_cursor] = (
-                    self.high_score_initials[self.high_score_cursor] + 1
-                ) % 26
-            else:
-                self.high_score_initials[self.high_score_cursor] = (
-                    self.high_score_initials[self.high_score_cursor] - 1
-                ) % 26
-            self.high_score_invalid_flash_timer = 0.0
+            self._adjust_active_high_score_letter(direction)
             return
 
         if self.flow_state is FlowState.GAME_OVER:
-            if not self.high_scores:
-                return
-            if direction < 0 and self._can_scroll_high_scores_up():
-                self.high_score_scroll_offset = 0
-            elif direction > 0 and self._can_scroll_high_scores_down():
-                self.high_score_scroll_offset = 1
+            self._update_high_score_scroll(direction)
             return
 
         if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
@@ -934,11 +961,7 @@ class Game:
             return
 
         if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
-            if direction < 0:
-                self.high_score_cursor = max(0, self.high_score_cursor - 1)
-            else:
-                self.high_score_cursor = min(HIGH_SCORE_INITIALS_LENGTH - 1, self.high_score_cursor + 1)
-            self.high_score_invalid_flash_timer = 0.0
+            self._move_high_score_cursor(direction)
             return
 
         if self.flow_state is FlowState.GAME_OVER:
@@ -1368,6 +1391,22 @@ class Game:
         self.pending_game_over = False
         self.flow_state = FlowState.PLAYING
 
+    def _reset_drink_scene_state(self, *, clear_summary: bool = True) -> None:
+        self.drink_scene_slots = []
+        self.drink_scene_selected_index = 0
+        self.drink_scene_purchased_indices = set()
+        self._clear_drink_scene_drink()
+        if clear_summary:
+            self.drink_scene_summary = None
+
+    def _open_drink_scene(self, summary: dict[str, int | float]) -> None:
+        self.flow_state = FlowState.LEVEL_CLEAR_DRINK_SCENE
+        self.drink_scene_slots = self._build_drink_scene_slots()
+        self.drink_scene_selected_index = 0
+        self.drink_scene_purchased_indices = set()
+        self._clear_drink_scene_drink()
+        self.drink_scene_summary = summary
+
     def _reset_game(self) -> None:
         self.current_level = 1
         self.level_config = build_level_config(self.current_level)
@@ -1402,6 +1441,7 @@ class Game:
         self.drink_scene_return_progress = 0.0
         self.flow_state = FlowState.PLAYING
         self.drink_scene_summary: dict[str, int | float] | None = None
+        self._reset_drink_scene_state()
         self._reset_high_score_entry_state()
         self.patron_rng = build_walk_speed_rng()
         self.tip_rng = Random(TIP_RNG_SEED)
@@ -1413,11 +1453,7 @@ class Game:
         self.level_config = build_level_config(self.current_level)
         self._activate_pending_round_beer_theme()
         self._activate_pending_round_tip_modifiers()
-        self.drink_scene_summary = None
-        self.drink_scene_slots = []
-        self.drink_scene_selected_index = 0
-        self.drink_scene_purchased_indices = set()
-        self._clear_drink_scene_drink()
+        self._reset_drink_scene_state()
         self.flow_state = FlowState.PLAYING
         self._reset_level_progress()
         self._reset_round()
@@ -1437,19 +1473,14 @@ class Game:
         tips_score = self.tip_score
         lives_bonus = self.lives * LIVES_REMAINING_BONUS
         self.score += lives_bonus
-        self.flow_state = FlowState.LEVEL_CLEAR_DRINK_SCENE
-        self.drink_scene_slots = self._build_drink_scene_slots()
-        self.drink_scene_selected_index = 0
-        self.drink_scene_purchased_indices = set()
-        self._clear_drink_scene_drink()
-        self.drink_scene_summary = {
+        self._open_drink_scene({
             "level": self.current_level,
             "beer_score": beer_score,
             "tips_score": tips_score,
             "lives_bonus": lives_bonus,
             "cash": self.cash,
             "total_score": self.score,
-        }
+        })
 
     def _draw_game_over_overlay(self, surface: pygame.Surface) -> None:
         overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
@@ -1566,15 +1597,30 @@ class Game:
         self._draw_drink_scene_bartender(surface, center_x)
         self._draw_drink_scene_bar_front(surface, center_x)
         self._draw_drink_scene_slots(surface, center_x)
-        selected_index = self.drink_scene_active_index if self.drink_scene_active_index is not None else self.drink_scene_selected_index
-        if 0 <= selected_index < len(self.drink_scene_slots):
-            bartender_body_rect = self._drink_scene_bartender_body_rect(center_x)
-            active_mug_rect, _ = self._drink_scene_slot_geometry(
-                center_x,
-                selected_index,
-                bartender_body_rect,
-            )
+
+        active_mug_rect = self._selected_drink_scene_mug_rect(center_x)
+        if active_mug_rect is not None:
             self._draw_drink_scene_grab_hand(surface, active_mug_rect)
+
+    def _active_drink_scene_selection_index(self) -> int | None:
+        if self.drink_scene_active_index is not None:
+            return self.drink_scene_active_index
+        if 0 <= self.drink_scene_selected_index < len(self.drink_scene_slots):
+            return self.drink_scene_selected_index
+        return None
+
+    def _selected_drink_scene_mug_rect(self, center_x: int) -> pygame.Rect | None:
+        selected_index = self._active_drink_scene_selection_index()
+        if selected_index is None:
+            return None
+
+        bartender_body_rect = self._drink_scene_bartender_body_rect(center_x)
+        mug_rect, _ = self._drink_scene_slot_geometry(
+            center_x,
+            selected_index,
+            bartender_body_rect,
+        )
+        return mug_rect
 
     def _drink_scene_selected_slot_center_x(self, center_x: int) -> int | None:
         if not self.drink_scene_slots:
@@ -1976,11 +2022,7 @@ class Game:
                     DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_INFLATE,
                     DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_INFLATE,
                 )
-                highlight_color = DRINK_SCENE_SELECTED_OUTLINE_COLOR
-                if is_purchased:
-                    highlight_color = DRINK_SCENE_PURCHASED_GLOW_COLOR
-                elif slot.kind == "upgrade" and not self._can_afford_drink_scene_slot(slot):
-                    highlight_color = DRINK_SCENE_UNAFFORDABLE_COLOR
+                highlight_color = self._drink_scene_slot_highlight_color(slot, is_purchased)
                 pygame.draw.rect(
                     surface,
                     highlight_color,
@@ -1989,16 +2031,7 @@ class Game:
                     border_radius=DRINK_SCENE_SLOT_SELECTED_HIGHLIGHT_RADIUS,
                 )
 
-            if slot.kind == "upgrade" and slot.offer is not None:
-                label = self._format_drink_scene_offer_label(slot.offer)
-                bonus = ""
-                cost = "" if is_purchased else self._format_offer_cash(slot.offer.cost)
-                status = self._format_drink_scene_status(index, slot)
-            else:
-                label = "CONTINUE"
-                bonus = ""
-                cost = "FREE BEER"
-                status = ""
+            label, bonus, cost, status = self._drink_scene_slot_text(index, slot, is_purchased)
 
             label_surface = self.drink_scene_detail_font.render(label, True, OVERLAY_TEXT_COLOR)
             surface.blit(label_surface, label_surface.get_rect(center=(mug_center_x, DRINK_SCENE_LABEL_Y)))
@@ -2017,6 +2050,33 @@ class Game:
                 status_surface = self.detail_font.render(status, True, status_color)
                 surface.blit(status_surface, status_surface.get_rect(center=(mug_center_x, DRINK_SCENE_STATUS_Y)))
 
+    def _drink_scene_slot_highlight_color(
+        self,
+        slot: DrinkSceneSlot,
+        is_purchased: bool,
+    ) -> pygame.Color:
+        if is_purchased:
+            return DRINK_SCENE_PURCHASED_GLOW_COLOR
+        if slot.kind == "upgrade" and not self._can_afford_drink_scene_slot(slot):
+            return DRINK_SCENE_UNAFFORDABLE_COLOR
+        return DRINK_SCENE_SELECTED_OUTLINE_COLOR
+
+    def _drink_scene_slot_text(
+        self,
+        index: int,
+        slot: DrinkSceneSlot,
+        is_purchased: bool,
+    ) -> tuple[str, str, str, str]:
+        if slot.kind == "upgrade" and slot.offer is not None:
+            return (
+                self._format_drink_scene_offer_label(slot.offer),
+                "",
+                "" if is_purchased else self._format_offer_cash(slot.offer.cost),
+                self._format_drink_scene_status(index, slot),
+            )
+
+        return ("CONTINUE", "", "FREE BEER", "")
+
     def _format_drink_scene_offer_label(self, offer: UpgradeOffer) -> str:
         if offer.definition.id == GREEN_BEER_THEME_ID:
             return "GREEN BEER"
@@ -2026,10 +2086,7 @@ class Game:
         if self.pending_game_over:
             self.fail_message = None
             self.pending_game_over = False
-            if self._qualifies_for_high_scores(self.score, self.current_level):
-                self._begin_high_score_entry()
-            else:
-                self.flow_state = FlowState.GAME_OVER
+            self._enter_post_fail_state()
             return
 
         self._reset_level_progress()
@@ -2074,7 +2131,10 @@ class Game:
             return
         if not self._can_activate_drink_scene_slot(self.drink_scene_selected_index):
             return
-        self.drink_scene_active_index = self.drink_scene_selected_index
+        self._begin_drink_scene_drink(self.drink_scene_selected_index)
+
+    def _begin_drink_scene_drink(self, index: int) -> None:
+        self.drink_scene_active_index = index
         self.drink_scene_drink_progress = 0.0
         self.drink_scene_space_held = True
         self.drink_scene_hold_timer = 0.0
@@ -2099,17 +2159,24 @@ class Game:
         if self.drink_scene_active_index is None:
             return
         if self.drink_scene_drink_progress >= 1.0:
-            if self.drink_scene_hold_timer > 0.0:
-                self.drink_scene_hold_timer = max(0.0, self.drink_scene_hold_timer - dt)
-                return
-            self.drink_scene_return_progress = min(
-                1.0,
-                self.drink_scene_return_progress + (dt / DRINK_SCENE_DRINK_RETURN_DURATION),
-            )
-            if self.drink_scene_return_progress >= 1.0:
-                self._complete_drink_scene_choice()
+            self._update_completed_drink_scene_choice(dt)
             return
 
+        self._update_active_drink_scene_choice(dt)
+
+    def _update_completed_drink_scene_choice(self, dt: float) -> None:
+        if self.drink_scene_hold_timer > 0.0:
+            self.drink_scene_hold_timer = max(0.0, self.drink_scene_hold_timer - dt)
+            return
+
+        self.drink_scene_return_progress = min(
+            1.0,
+            self.drink_scene_return_progress + (dt / DRINK_SCENE_DRINK_RETURN_DURATION),
+        )
+        if self.drink_scene_return_progress >= 1.0:
+            self._complete_drink_scene_choice()
+
+    def _update_active_drink_scene_choice(self, dt: float) -> None:
         if not self.drink_scene_space_held:
             return
 
