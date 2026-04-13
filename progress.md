@@ -12,3 +12,12 @@ Original prompt: Debug the web Firebase leaderboard integration so the browser b
 - Rebuilt the pygbag export and re-ran `scripts/prepare_web_build.py`, so the generated web shell now includes `forceDirectional`, `heldLeft`, `heldRight`, and the broader Safari arrow-key token detection.
 - `py_compile` passed when run with a workspace-local pycache prefix; the earlier failure was only macOS Python trying to write bytecode into a protected global cache folder.
 - Could not run the Playwright validation loop yet because the `playwright` npm package is not installed in this repo environment; browser-side follow-up should be manual unless/until that dependency is added.
+- Phase F work started using the addendum's S.13 guidance: bundled `assets/fonts/SourceCodePro-Bold.ttf`, added shared loader in `fonts.py`, and replaced `pygame.font.SysFont("couriernew", ...)` usage in `game.py` and `hud.py`.
+- Verified both code paths: normal bundled-font load works, and a missing-font-path simulation falls back to `pygame.font.Font(None, size)` without crashing.
+- Phase F web follow-up completed: rebuilt the pygbag export after the bundled-font change, then re-ran `scripts/prepare_web_build.py` in the correct order so `docs/` and `web/` actually received the fresh tarball.
+- Verified packaged font inclusion end-to-end: `build/web/tapper.tar.gz`, `docs/tapper.tar.gz`, and `web/tapper.tar.gz` now share the same hash and all contain `assets/assets/fonts/SourceCodePro-Bold.ttf`.
+- Took local browser screenshots of the updated `docs/` build in Chromium and WebKit via Playwright; the prestart shell renders cleanly and consistently in both engines.
+- Console automation remains a little flaky in this environment even after installing Playwright browsers, so browser-console verification is still best treated as a manual spot-check if needed.
+- R1 cleanup pass: refactored the `game.py` input hotspot by extracting per-flow-state handlers (`_handle_high_score_entry_event`, `_handle_game_over_event`, `_handle_drink_scene_event`, `_handle_gameplay_event`) and centralizing shared key-group constants.
+- This pass is intended to be behavior-preserving only; `py_compile` passed after the extraction.
+- Natural R2 target: continue the cleanup by separating leaderboard/high-score state transitions from the rest of `Game`, or do the same style of helper extraction for the level-clear drink scene build/draw logic.

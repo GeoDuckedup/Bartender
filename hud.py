@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pygame
 
+from fonts import load_ui_font
 from renderer import (
     HUD_BACKGROUND_COLOR,
     HUD_BORDER_COLOR,
@@ -26,7 +27,7 @@ HUD_BORDER_THICKNESS = 2
 
 class HUDRenderer:
     def __init__(self) -> None:
-        self.font = pygame.font.SysFont("couriernew", HUD_FONT_SIZE, bold=True)
+        self.font = load_ui_font(HUD_FONT_SIZE)
 
     def draw(
         self,

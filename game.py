@@ -24,6 +24,7 @@ from bartender import (
     BARTENDER_BODY_COLOR,
     Bartender,
 )
+from fonts import load_ui_font
 from glass import (
     FLYING_GLASS_SPEED,
     GREEN_BEER_FILL_COLOR,
@@ -115,6 +116,15 @@ GAME_OVER_LEADERBOARD_HEADER_COLOR = pygame.Color("#D7C7A8")
 GAME_OVER_LEADERBOARD_RANK_COLOR = pygame.Color("#B6A98D")
 DRINK_SCENE_PURCHASED_GLOW_COLOR = pygame.Color("#E7C05A")
 DRINK_SCENE_PURCHASED_LABEL = "BOUGHT"
+
+ARROW_VERTICAL_KEYS = (pygame.K_UP, pygame.K_DOWN)
+ARROW_HORIZONTAL_KEYS = (pygame.K_LEFT, pygame.K_RIGHT)
+ARROW_KEYS = ARROW_VERTICAL_KEYS + ARROW_HORIZONTAL_KEYS
+UPWARD_KEYS = (pygame.K_UP, pygame.K_w)
+DOWNWARD_KEYS = (pygame.K_DOWN, pygame.K_s)
+LEFTWARD_KEYS = (pygame.K_LEFT, pygame.K_a)
+RIGHTWARD_KEYS = (pygame.K_RIGHT, pygame.K_d)
+CONFIRM_KEYS = (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE)
 
 # Level-clear drink scene layout:
 # This dedicated reward scene replaces the old gameplay overlay and gives us
@@ -662,11 +672,11 @@ class Game:
     def __init__(self) -> None:
         self.scene_renderer = SceneRenderer()
         self.hud_renderer = HUDRenderer()
-        self.overlay_font = pygame.font.SysFont("couriernew", 18, bold=True)
-        self.detail_font = pygame.font.SysFont("couriernew", 12, bold=True)
-        self.high_score_entry_font = pygame.font.SysFont("couriernew", 24, bold=True)
-        self.drink_scene_title_font = pygame.font.SysFont("couriernew", 20, bold=True)
-        self.drink_scene_detail_font = pygame.font.SysFont("couriernew", 14, bold=True)
+        self.overlay_font = load_ui_font(18)
+        self.detail_font = load_ui_font(12)
+        self.high_score_entry_font = load_ui_font(24)
+        self.drink_scene_title_font = load_ui_font(20)
+        self.drink_scene_detail_font = load_ui_font(14)
         self.high_scores = self._load_high_scores()
         self.background_tasks: set[asyncio.Task[object]] = set()
         self._reset_game()
@@ -977,67 +987,67 @@ class Game:
             elif token == "RIGHT":
                 self._handle_horizontal_navigation(1)
 
-    def handle_event(self, event: pygame.event.Event) -> None:
-        if self.flow_state is FlowState.FAILING:
+    @staticmethod
+    def _is_force_directional_arrow(force_directional: bool, key: int) -> bool:
+        return force_directional and key in ARROW_KEYS
+
+    def _handle_high_score_entry_event(self, event: pygame.event.Event, force_directional: bool) -> None:
+        if event.type != pygame.KEYDOWN:
             return
 
-        _bridge, force_directional, _held_left, _held_right = self._browser_input_bridge_state()
+        if self._is_force_directional_arrow(force_directional, event.key):
+            return
 
-        if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
-            if event.type != pygame.KEYDOWN:
-                return
-            if force_directional and event.key in (
-                pygame.K_UP,
-                pygame.K_DOWN,
-                pygame.K_LEFT,
-                pygame.K_RIGHT,
-            ):
-                return
-            if event.key in (pygame.K_UP, pygame.K_w):
+        if event.key in UPWARD_KEYS:
+            self._handle_vertical_navigation(-1)
+        elif event.key in DOWNWARD_KEYS:
+            self._handle_vertical_navigation(1)
+        elif event.key in LEFTWARD_KEYS:
+            self._handle_horizontal_navigation(-1)
+        elif event.key in RIGHTWARD_KEYS:
+            self._handle_horizontal_navigation(1)
+        elif event.key in CONFIRM_KEYS:
+            self._submit_high_score_entry()
+
+    def _handle_game_over_event(self, event: pygame.event.Event, force_directional: bool) -> None:
+        if event.type != pygame.KEYDOWN:
+            return
+
+        if force_directional and event.key in ARROW_VERTICAL_KEYS:
+            return
+
+        if self.high_scores and event.key in ARROW_VERTICAL_KEYS + (pygame.K_w, pygame.K_s):
+            if event.key in UPWARD_KEYS:
                 self._handle_vertical_navigation(-1)
-            elif event.key in (pygame.K_DOWN, pygame.K_s):
+            elif event.key in DOWNWARD_KEYS:
                 self._handle_vertical_navigation(1)
-            elif event.key in (pygame.K_LEFT, pygame.K_a):
+            return
+
+        if event.key == pygame.K_SPACE:
+            self._reset_game()
+
+    def _handle_drink_scene_event(self, event: pygame.event.Event, force_directional: bool) -> None:
+        if event.type == pygame.KEYDOWN:
+            if force_directional and event.key in ARROW_HORIZONTAL_KEYS:
+                return
+            if event.key == pygame.K_SPACE:
+                if self._is_drink_scene_drinking():
+                    self.drink_scene_space_held = True
+                else:
+                    self._start_drink_scene_drink()
+                return
+            if self._is_drink_scene_drinking():
+                return
+            if event.key in LEFTWARD_KEYS:
                 self._handle_horizontal_navigation(-1)
-            elif event.key in (pygame.K_RIGHT, pygame.K_d):
+            elif event.key in RIGHTWARD_KEYS:
                 self._handle_horizontal_navigation(1)
-            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
-                self._submit_high_score_entry()
             return
 
-        if self.flow_state is FlowState.GAME_OVER:
-            if event.type == pygame.KEYDOWN:
-                if force_directional and event.key in (pygame.K_UP, pygame.K_DOWN):
-                    return
-                if self.high_scores and event.key in (pygame.K_UP, pygame.K_DOWN):
-                    if event.key == pygame.K_UP:
-                        self._handle_vertical_navigation(-1)
-                    elif event.key == pygame.K_DOWN:
-                        self._handle_vertical_navigation(1)
-                    return
-                if event.key == pygame.K_SPACE:
-                    self._reset_game()
-            return
+        if event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
+            self._pause_drink_scene_drink()
 
-        if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
-            if event.type == pygame.KEYDOWN:
-                if force_directional and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
-                    return
-                if event.key == pygame.K_SPACE:
-                    if self._is_drink_scene_drinking():
-                        self.drink_scene_space_held = True
-                    else:
-                        self._start_drink_scene_drink()
-                elif self._is_drink_scene_drinking():
-                    return
-                elif event.key in (pygame.K_LEFT, pygame.K_a):
-                    self._handle_horizontal_navigation(-1)
-                elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                    self._handle_horizontal_navigation(1)
-            elif event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
-                self._pause_drink_scene_drink()
-            return
-
+    def _handle_gameplay_event(self, event: pygame.event.Event, force_directional: bool) -> None:
         if event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
             self.bartender.release_pour()
             return
@@ -1049,28 +1059,33 @@ class Game:
             self.bartender.start_pour()
             return
 
-        is_arrow = event.key in (
-            pygame.K_UP,
-            pygame.K_DOWN,
-            pygame.K_LEFT,
-            pygame.K_RIGHT,
-            pygame.K_a,
-            pygame.K_d,
-            pygame.K_w,
-            pygame.K_s,
-        )
-        if force_directional and event.key in (
-            pygame.K_UP,
-            pygame.K_DOWN,
-            pygame.K_LEFT,
-            pygame.K_RIGHT,
-        ):
+        if self._is_force_directional_arrow(force_directional, event.key):
             return
 
-        if event.key in (pygame.K_UP, pygame.K_w):
+        if event.key in UPWARD_KEYS:
             self._handle_vertical_navigation(-1)
-        elif event.key in (pygame.K_DOWN, pygame.K_s):
+        elif event.key in DOWNWARD_KEYS:
             self._handle_vertical_navigation(1)
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if self.flow_state is FlowState.FAILING:
+            return
+
+        _bridge, force_directional, _held_left, _held_right = self._browser_input_bridge_state()
+
+        if self.flow_state is FlowState.HIGH_SCORE_ENTRY:
+            self._handle_high_score_entry_event(event, force_directional)
+            return
+
+        if self.flow_state is FlowState.GAME_OVER:
+            self._handle_game_over_event(event, force_directional)
+            return
+
+        if self.flow_state is FlowState.LEVEL_CLEAR_DRINK_SCENE:
+            self._handle_drink_scene_event(event, force_directional)
+            return
+
+        self._handle_gameplay_event(event, force_directional)
 
     def update(self, dt: float) -> None:
         self._consume_browser_input_bridge()
